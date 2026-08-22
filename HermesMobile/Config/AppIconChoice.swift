@@ -9,16 +9,16 @@ enum AppIconChoice: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var title: String {
-        String(localized: "Goku")
+        String(localized: "Semreh")
     }
 
     var subtitle: String {
-        "Canonical Goku icon"
+        "Canonical Semreh icon"
     }
 
     var alternateIconName: String? { nil }
 
-    var previewImageName: String? { "GokuAppIcon" }
+    var previewImageName: String? { "SemrehAppIcon" }
 
     static func resolved(from alternateIconName: String?) -> AppIconChoice {
         .system

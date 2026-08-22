@@ -78,7 +78,7 @@ struct WorkspaceManagerView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background { GokuBackdrop().ignoresSafeArea() }
+            .background { SemrehBackdrop().ignoresSafeArea() }
             .navigationTitle("Manage Workspaces")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -270,7 +270,7 @@ private struct WorkspaceAddSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background { GokuBackdrop().ignoresSafeArea() }
+            .background { SemrehBackdrop().ignoresSafeArea() }
             .navigationTitle("Add Workspace")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -58,7 +58,7 @@ struct TaskDetailView: View {
             }
             .padding()
         }
-        .background { GokuBackdrop().ignoresSafeArea() }
+        .background { SemrehBackdrop().ignoresSafeArea() }
         .navigationTitle(viewModel.job.displayName)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {

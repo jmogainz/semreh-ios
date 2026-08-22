@@ -16,7 +16,7 @@ struct TasksView: View {
     var body: some View {
         content
             .scrollContentBackground(.hidden)
-            .background { GokuBackdrop().ignoresSafeArea() }
+            .background { SemrehBackdrop().ignoresSafeArea() }
             .navigationTitle("Tasks")
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {

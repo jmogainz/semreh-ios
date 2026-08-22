@@ -32,7 +32,7 @@ Contract test readiness is documented in [`CONTRACT_TESTS.md`](CONTRACT_TESTS.md
 
 Phase 4 streaming uses `GET /api/chat/stream?stream_id=...` over Server-Sent Events. Current upstream source confirms the stream response uses `Content-Type: text/event-stream; charset=utf-8`, `X-Accel-Buffering: no`, `Connection: keep-alive`, and sends `: heartbeat` comments every 30 seconds while no app event is ready.
 
-Cloudflare can still close long-lived responses if the origin does not send data for long enough. The expected healthy behavior for Goku is:
+Cloudflare can still close long-lived responses if the origin does not send data for long enough. The expected healthy behavior for Semreh is:
 
 - streams longer than 2 minutes continue delivering tokens, tool events, reasoning events, title events, `done`, and `stream_end` when the server emits them;
 - quiet periods under normal heartbeat behavior stay connected because the server writes `: heartbeat` about every 30 seconds;
@@ -102,7 +102,7 @@ XcodeBuildMCP is the preferred local validation path for feature and bug-fix sli
 - Scheme: `HermesMobile`
 - Configuration: `Debug`
 - Simulator: `iPhone 17`
-- Bundle ID: `com.jacobmoore.goku`
+- Bundle ID: `com.jacobmoore.semreh`
 
 After each completed implementation slice:
 
@@ -116,7 +116,7 @@ After each completed implementation slice:
 Agent/MCP flow:
 
 - Call `session_show_defaults` before the first local build/run/test.
-- If defaults are missing, set project `HermesMobile.xcodeproj`, scheme `HermesMobile`, configuration `Debug`, simulator `iPhone 17`, and bundle ID `com.jacobmoore.goku`.
+- If defaults are missing, set project `HermesMobile.xcodeproj`, scheme `HermesMobile`, configuration `Debug`, simulator `iPhone 17`, and bundle ID `com.jacobmoore.semreh`.
 - Use `test_sim` for XCTest validation.
 - Use `build_run_sim` to build, install, launch, and open Simulator for manual testing.
 - Use `screenshot`, UI inspection, and log capture only when they help validate the slice.
@@ -183,41 +183,41 @@ If `iPhone 15` is not installed, choose a nearby available iPhone simulator.
 
 Current status:
 
-- App Store Connect record name: `Goku Mobile Agent` (Apple requires a globally unique record name; the installed product name remains exactly `Goku`).
+- App Store Connect record name: `Semreh Mobile Agent` (Apple requires a globally unique record name; the installed product name remains exactly `Semreh`).
 - Xcode target/scheme name: `HermesMobile` (internal build plumbing only).
-- iPhone/iPad home-screen display and bundle name: `Goku`.
-- Bundle ID: `com.jacobmoore.goku`.
-- Test bundle ID: `com.jacobmoore.goku.tests`.
-- SKU: `goku-ios-2026`.
+- iPhone/iPad home-screen display and bundle name: `Semreh`.
+- Bundle ID: `com.jacobmoore.semreh`.
+- Test bundle ID: `com.jacobmoore.semreh.tests`.
+- SKU: `semreh-ios-2026`.
 - Apple Developer Team ID: `U8G25F98S2`.
 - Signing uses Xcode automatic signing.
 - Export compliance is declared in `Info.plist` with `ITSAppUsesNonExemptEncryption = NO`; the app does not implement custom/proprietary encryption and uses normal Apple/platform networking security.
-- The canonical app icon is generated from `Brand/GokuAppIconSource.png`; legacy alternate Hermex icons are intentionally removed.
+- The canonical app icon is generated from `Brand/SemrehAppIconSource.png`; legacy alternate Hermex icons are intentionally removed.
 - Launch screen uses the plist-based `UILaunchScreen` placeholder from `Info.plist`, which is acceptable for internal TestFlight validation.
 - `PrivacyInfo.xcprivacy` is bundled with the app target. It declares no tracking, no developer-collected data, and app-only `UserDefaults` access for local preferences.
 - The current GitHub Actions upload path is intentionally internal-only. External TestFlight readiness and Beta App Review sequencing are tracked in [`TESTFLIGHT.md`](TESTFLIGHT.md).
 
 ### App Store Connect identity
 
-The App Store Connect record, bundle ID, TestFlight group, and installed app all represent the Goku product. Apple would not accept the globally occupied record name `Goku`, so the administrative record is `Goku Mobile Agent`; `CFBundleDisplayName` and `CFBundleName` are both `Goku`.
+The App Store Connect record, bundle ID, TestFlight group, and installed app all represent the Semreh product. Apple would not accept the globally occupied record name `Semreh`, so the administrative record is `Semreh Mobile Agent`; `CFBundleDisplayName` and `CFBundleName` are both `Semreh`.
 
 ### Branch TestFlight upload (CLI) — the "push to branch testflight" command
 
 When the owner says **"push to branch testflight"**, upload the current *feature branch*
-to the side-by-side **Goku Branch** internal TestFlight app. This is a TestFlight
+to the side-by-side **Semreh Branch** internal TestFlight app. This is a TestFlight
 upload, **not** a Git push. Never merge, Git push, or upload the production
-`com.jacobmoore.goku` TestFlight app unless the owner explicitly asks.
+`com.jacobmoore.semreh` TestFlight app unless the owner explicitly asks.
 
 Branch TestFlight app identity:
 
-- App Store Connect app name: `Goku Branch`
-- Main bundle ID: `com.jacobmoore.goku.branch`
-- Share extension bundle ID: `com.jacobmoore.goku.branch.shareextension`
-- Live Activity widget bundle ID: `com.jacobmoore.goku.branch.liveactivitywidget`
-- Display name: `Goku Branch`
-- App group: `group.com.jacobmoore.goku.branch`
-- URL scheme: `goku-branch`
-- SKU: `goku-ios-branch`
+- App Store Connect app name: `Semreh Branch`
+- Main bundle ID: `com.jacobmoore.semreh.branch`
+- Share extension bundle ID: `com.jacobmoore.semreh.branch.shareextension`
+- Live Activity widget bundle ID: `com.jacobmoore.semreh.branch.liveactivitywidget`
+- Display name: `Semreh Branch`
+- App group: `group.com.jacobmoore.semreh.branch`
+- URL scheme: `semreh-branch`
+- SKU: `semreh-ios-branch`
 
 Steps:
 
@@ -266,7 +266,7 @@ GitHub Actions internal TestFlight flow:
 4. Merging to `master` automatically runs Fastlane (`bundle exec fastlane ios internal_testflight`) and uploads an internal-only TestFlight build. Markdown/docs-only pushes are skipped.
 5. To retry the same `master` commit without another merge, run the `Internal TestFlight` workflow from the Actions tab and leave `build_number` blank so Fastlane selects the next App Store Connect build number.
 6. Fastlane archives a Release IPA with `ci/TestFlightExportIPA.plist` (`testFlightInternalTestingOnly = true`) and uploads it with `upload_to_testflight`. Those builds cannot be promoted to external TestFlight or App Store distribution.
-7. Wait for App Store Connect processing. If **Goku Internal** has automatic distribution enabled, the build attaches itself; otherwise add it to the group after processing.
+7. Wait for App Store Connect processing. If **Semreh Internal** has automatic distribution enabled, the build attaches itself; otherwise add it to the group after processing.
 
 CI upload guardrails and likely failure modes:
 
@@ -291,7 +291,7 @@ GitHub Actions external-capable TestFlight flow:
 ## Full-App Manual Regression Checklist
 
 Use this before internal TestFlight smoke builds and again before adding external testers.
-Capture bugs, polish notes, and follow-up ideas in [GitHub Issues](https://github.com/jmogainz/goku-ios/issues).
+Capture bugs, polish notes, and follow-up ideas in [GitHub Issues](https://github.com/jmogainz/semreh-ios/issues).
 
 ### Onboarding/Auth
 - Fresh install opens onboarding.

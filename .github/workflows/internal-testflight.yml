@@ -42,7 +42,7 @@ jobs:
       PROJECT_PATH: HermesMobile.xcodeproj
       SCHEME: HermesMobile
       TEAM_ID: U8G25F98S2
-      BUNDLE_ID: com.jacobmoore.goku
+      BUNDLE_ID: com.jacobmoore.semreh
       FASTLANE_SKIP_UPDATE_CHECK: "1"
       FASTLANE_HIDE_CHANGELOG: "1"
 

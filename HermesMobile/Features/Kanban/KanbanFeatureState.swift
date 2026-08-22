@@ -134,11 +134,11 @@ enum KanbanDispatchAccessibility {
         switch state.phase {
         case .refused:
             parts.append(
-                String(localized: "The server refused this Dispatcher request. Goku did not retry it.")
+                String(localized: "The server refused this Dispatcher request. Semreh did not retry it.")
             )
         case .outcomeUncertain:
             parts.append(
-                String(localized: "Goku refreshed the Board, but cannot prove whether workers started. Review the current Board before running Dispatcher again.")
+                String(localized: "Semreh refreshed the Board, but cannot prove whether workers started. Review the current Board before running Dispatcher again.")
             )
         case .boardUnavailable:
             parts.append(String(localized: "This Board no longer exists. Choose another Board."))

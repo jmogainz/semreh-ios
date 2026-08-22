@@ -16,7 +16,7 @@ struct MemoryView: View {
     var body: some View {
         content
             .scrollContentBackground(.hidden)
-            .background { GokuBackdrop().ignoresSafeArea() }
+            .background { SemrehBackdrop().ignoresSafeArea() }
             .navigationTitle("Memory")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -239,7 +239,7 @@ private struct MemoryEditSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background { GokuBackdrop().ignoresSafeArea() }
+            .background { SemrehBackdrop().ignoresSafeArea() }
             .navigationTitle("Edit \(section.title)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

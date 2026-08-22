@@ -18,18 +18,18 @@ final class AppThemeTests: XCTestCase {
         XCTAssertNil(AppTheme.sand.colorScheme)
     }
 
-    func testThemeDropdownKeepsGokuDefaultsAndAddsNamedPalettes() {
+    func testThemeDropdownKeepsSemrehDefaultsAndAddsNamedPalettes() {
         XCTAssertEqual(AppTheme.allCases.map(\.rawValue), [
             "system", "light", "dark", "chatgpt", "midnight", "forest", "sand"
         ])
-        XCTAssertEqual(AppTheme.system.title, "Goku")
+        XCTAssertEqual(AppTheme.system.title, "Semreh")
         XCTAssertEqual(AppTheme.chatgpt.title, "ChatGPT")
         XCTAssertEqual(AppTheme.midnight.title, "Midnight")
         XCTAssertEqual(AppTheme.forest.title, "Forest")
         XCTAssertEqual(AppTheme.sand.title, "Sand")
-        XCTAssertEqual(AppTheme.system.palette, .goku)
-        XCTAssertEqual(AppTheme.light.palette, .goku)
-        XCTAssertEqual(AppTheme.dark.palette, .goku)
+        XCTAssertEqual(AppTheme.system.palette, .semreh)
+        XCTAssertEqual(AppTheme.light.palette, .semreh)
+        XCTAssertEqual(AppTheme.dark.palette, .semreh)
         XCTAssertEqual(AppTheme.chatgpt.palette, .chatgpt)
         XCTAssertEqual(AppTheme.midnight.palette, .midnight)
         XCTAssertEqual(AppTheme.forest.palette, .forest)
@@ -42,33 +42,33 @@ final class AppThemeTests: XCTestCase {
         for palette in palettes {
             for scheme in [ColorScheme.light, .dark] {
                 XCTAssertGreaterThanOrEqual(
-                    GokuVisualTheme.contrastRatio(
-                        foregroundHex: GokuVisualTheme.actionHex(for: scheme, palette: palette),
-                        backgroundHex: GokuVisualTheme.panelHex(for: scheme, palette: palette)
+                    SemrehVisualTheme.contrastRatio(
+                        foregroundHex: SemrehVisualTheme.actionHex(for: scheme, palette: palette),
+                        backgroundHex: SemrehVisualTheme.panelHex(for: scheme, palette: palette)
                     ),
                     4.5,
                     "action/panel failed for \(palette) \(scheme)"
                 )
                 XCTAssertGreaterThanOrEqual(
-                    GokuVisualTheme.contrastRatio(
-                        foregroundHex: GokuVisualTheme.accentForegroundHex(for: scheme, palette: palette),
-                        backgroundHex: GokuVisualTheme.actionHex(for: scheme, palette: palette)
+                    SemrehVisualTheme.contrastRatio(
+                        foregroundHex: SemrehVisualTheme.accentForegroundHex(for: scheme, palette: palette),
+                        backgroundHex: SemrehVisualTheme.actionHex(for: scheme, palette: palette)
                     ),
                     4.5,
                     "accent/action failed for \(palette) \(scheme)"
                 )
                 XCTAssertGreaterThanOrEqual(
-                    GokuVisualTheme.contrastRatio(
-                        foregroundHex: GokuVisualTheme.brandAccentHex(for: scheme, palette: palette),
-                        backgroundHex: GokuVisualTheme.canvasHex(for: scheme, palette: palette)
+                    SemrehVisualTheme.contrastRatio(
+                        foregroundHex: SemrehVisualTheme.brandAccentHex(for: scheme, palette: palette),
+                        backgroundHex: SemrehVisualTheme.canvasHex(for: scheme, palette: palette)
                     ),
                     4.5,
                     "brand/canvas failed for \(palette) \(scheme)"
                 )
                 XCTAssertGreaterThanOrEqual(
-                    GokuVisualTheme.contrastRatio(
-                        foregroundHex: GokuVisualTheme.energyForegroundHex(for: palette),
-                        backgroundHex: GokuVisualTheme.energyHex(for: palette)
+                    SemrehVisualTheme.contrastRatio(
+                        foregroundHex: SemrehVisualTheme.energyForegroundHex(for: palette),
+                        backgroundHex: SemrehVisualTheme.energyHex(for: palette)
                     ),
                     4.5,
                     "energy failed for \(palette)"
@@ -78,101 +78,101 @@ final class AppThemeTests: XCTestCase {
     }
 
     func testChatGPTPaletteUsesNeutralSurfacesAndSageAccent() {
-        XCTAssertEqual(GokuVisualTheme.canvasHex(for: .light, palette: .chatgpt), "#F7F7F8")
-        XCTAssertEqual(GokuVisualTheme.canvasHex(for: .dark, palette: .chatgpt), "#212121")
-        XCTAssertEqual(GokuVisualTheme.actionHex(for: .light, palette: .chatgpt), "#0B7A5E")
-        XCTAssertEqual(GokuVisualTheme.actionHex(for: .dark, palette: .chatgpt), "#4ADE80")
+        XCTAssertEqual(SemrehVisualTheme.canvasHex(for: .light, palette: .chatgpt), "#F7F7F8")
+        XCTAssertEqual(SemrehVisualTheme.canvasHex(for: .dark, palette: .chatgpt), "#212121")
+        XCTAssertEqual(SemrehVisualTheme.actionHex(for: .light, palette: .chatgpt), "#0B7A5E")
+        XCTAssertEqual(SemrehVisualTheme.actionHex(for: .dark, palette: .chatgpt), "#4ADE80")
         XCTAssertNotEqual(
-            GokuVisualTheme.canvasHex(for: .light, palette: .chatgpt),
-            GokuVisualTheme.canvasHex(for: .light, palette: .goku)
+            SemrehVisualTheme.canvasHex(for: .light, palette: .chatgpt),
+            SemrehVisualTheme.canvasHex(for: .light, palette: .semreh)
         )
     }
 
-    func testGokuVisualThemeUsesCanonicalPalette() {
-        XCTAssertEqual(GokuVisualTheme.giOrangeHex, "#F47A21")
-        XCTAssertEqual(GokuVisualTheme.royalBlueHex, "#2166F3")
-        XCTAssertEqual(GokuVisualTheme.energyGoldHex, "#FFD54A")
-        XCTAssertEqual(GokuVisualTheme.deepNavyHex, "#071426")
-        XCTAssertEqual(GokuVisualTheme.skyBlueHex, "#73D5FF")
-        XCTAssertEqual(GokuVisualTheme.brandAction, GokuVisualTheme.giOrange)
-        XCTAssertEqual(GokuVisualTheme.energy, GokuVisualTheme.energyGold)
+    func testSemrehVisualThemeUsesCanonicalPalette() {
+        XCTAssertEqual(SemrehVisualTheme.giOrangeHex, "#F47A21")
+        XCTAssertEqual(SemrehVisualTheme.royalBlueHex, "#2166F3")
+        XCTAssertEqual(SemrehVisualTheme.energyGoldHex, "#FFD54A")
+        XCTAssertEqual(SemrehVisualTheme.deepNavyHex, "#071426")
+        XCTAssertEqual(SemrehVisualTheme.skyBlueHex, "#73D5FF")
+        XCTAssertEqual(SemrehVisualTheme.brandAction, SemrehVisualTheme.giOrange)
+        XCTAssertEqual(SemrehVisualTheme.energy, SemrehVisualTheme.energyGold)
     }
 
-    func testGokuVisualThemeActionAdaptsForDarkModeContrast() {
-        XCTAssertEqual(GokuVisualTheme.actionHex(for: .light), GokuVisualTheme.royalBlueHex)
-        XCTAssertEqual(GokuVisualTheme.actionHex(for: .dark), GokuVisualTheme.skyBlueHex)
+    func testSemrehVisualThemeActionAdaptsForDarkModeContrast() {
+        XCTAssertEqual(SemrehVisualTheme.actionHex(for: .light), SemrehVisualTheme.royalBlueHex)
+        XCTAssertEqual(SemrehVisualTheme.actionHex(for: .dark), SemrehVisualTheme.skyBlueHex)
 
         for scheme in [ColorScheme.light, .dark] {
             XCTAssertGreaterThanOrEqual(
-                GokuVisualTheme.contrastRatio(
-                    foregroundHex: GokuVisualTheme.actionHex(for: scheme),
-                    backgroundHex: GokuVisualTheme.panelHex(for: scheme)
+                SemrehVisualTheme.contrastRatio(
+                    foregroundHex: SemrehVisualTheme.actionHex(for: scheme),
+                    backgroundHex: SemrehVisualTheme.panelHex(for: scheme)
                 ),
                 4.5
             )
         }
     }
 
-    func testGokuVisualThemeUsesReadableAccentForegrounds() {
-        XCTAssertEqual(GokuVisualTheme.accentForegroundHex(for: .light), "#FFFFFF")
-        XCTAssertEqual(GokuVisualTheme.accentForegroundHex(for: .dark), GokuVisualTheme.deepNavyHex)
+    func testSemrehVisualThemeUsesReadableAccentForegrounds() {
+        XCTAssertEqual(SemrehVisualTheme.accentForegroundHex(for: .light), "#FFFFFF")
+        XCTAssertEqual(SemrehVisualTheme.accentForegroundHex(for: .dark), SemrehVisualTheme.deepNavyHex)
 
         for scheme in [ColorScheme.light, .dark] {
             XCTAssertGreaterThanOrEqual(
-                GokuVisualTheme.contrastRatio(
-                    foregroundHex: GokuVisualTheme.accentForegroundHex(for: scheme),
-                    backgroundHex: GokuVisualTheme.actionHex(for: scheme)
+                SemrehVisualTheme.contrastRatio(
+                    foregroundHex: SemrehVisualTheme.accentForegroundHex(for: scheme),
+                    backgroundHex: SemrehVisualTheme.actionHex(for: scheme)
                 ),
                 4.5
             )
         }
     }
 
-    func testGokuVisualThemeAccessibilitySurfaceTreatments() {
+    func testSemrehVisualThemeAccessibilitySurfaceTreatments() {
         for scheme in [ColorScheme.light, .dark] {
             XCTAssertGreaterThan(
-                GokuVisualTheme.panelStrokeOpacity(for: scheme, increasedContrast: true),
-                GokuVisualTheme.panelStrokeOpacity(for: scheme, increasedContrast: false)
+                SemrehVisualTheme.panelStrokeOpacity(for: scheme, increasedContrast: true),
+                SemrehVisualTheme.panelStrokeOpacity(for: scheme, increasedContrast: false)
             )
             XCTAssertEqual(
-                GokuVisualTheme.navigationBarOpacity(for: scheme, reduceTransparency: true),
+                SemrehVisualTheme.navigationBarOpacity(for: scheme, reduceTransparency: true),
                 1
             )
             XCTAssertLessThan(
-                GokuVisualTheme.navigationBarOpacity(for: scheme, reduceTransparency: false),
+                SemrehVisualTheme.navigationBarOpacity(for: scheme, reduceTransparency: false),
                 1
             )
         }
     }
 
-    func testGokuVisualThemeChromeSurfacesBecomeOpaqueWithReduceTransparency() {
-        XCTAssertEqual(GokuVisualTheme.chromeSurfaceOpacity(reduceTransparency: true), 1)
-        XCTAssertLessThan(GokuVisualTheme.chromeSurfaceOpacity(reduceTransparency: false), 1)
+    func testSemrehVisualThemeChromeSurfacesBecomeOpaqueWithReduceTransparency() {
+        XCTAssertEqual(SemrehVisualTheme.chromeSurfaceOpacity(reduceTransparency: true), 1)
+        XCTAssertLessThan(SemrehVisualTheme.chromeSurfaceOpacity(reduceTransparency: false), 1)
     }
 
-    func testGokuVisualThemeUsesReadablePrimaryActionForeground() {
-        XCTAssertEqual(GokuVisualTheme.primaryActionForegroundHex, GokuVisualTheme.deepNavyHex)
+    func testSemrehVisualThemeUsesReadablePrimaryActionForeground() {
+        XCTAssertEqual(SemrehVisualTheme.primaryActionForegroundHex, SemrehVisualTheme.deepNavyHex)
         XCTAssertGreaterThan(
-            GokuVisualTheme.contrastRatio(
-                foregroundHex: GokuVisualTheme.primaryActionForegroundHex,
-                backgroundHex: GokuVisualTheme.energyGoldHex
+            SemrehVisualTheme.contrastRatio(
+                foregroundHex: SemrehVisualTheme.primaryActionForegroundHex,
+                backgroundHex: SemrehVisualTheme.energyGoldHex
             ),
             4.5
         )
     }
 
-    func testGokuVisualThemeCanvasAdaptsToColorScheme() {
-        XCTAssertEqual(GokuVisualTheme.canvasHex(for: .light), "#FFF8EE")
-        XCTAssertEqual(GokuVisualTheme.canvasHex(for: .dark), "#071426")
-        XCTAssertNotEqual(GokuVisualTheme.panelHex(for: .light), GokuVisualTheme.panelHex(for: .dark))
+    func testSemrehVisualThemeCanvasAdaptsToColorScheme() {
+        XCTAssertEqual(SemrehVisualTheme.canvasHex(for: .light), "#FFF8EE")
+        XCTAssertEqual(SemrehVisualTheme.canvasHex(for: .dark), "#071426")
+        XCTAssertNotEqual(SemrehVisualTheme.panelHex(for: .light), SemrehVisualTheme.panelHex(for: .dark))
     }
 
     func testAdaptiveBrandAccentMeetsTextContrastInBothAppearances() {
         for scheme in [ColorScheme.light, .dark] {
             XCTAssertGreaterThanOrEqual(
-                GokuVisualTheme.contrastRatio(
-                    foregroundHex: GokuVisualTheme.brandAccentHex(for: scheme),
-                    backgroundHex: GokuVisualTheme.canvasHex(for: scheme)
+                SemrehVisualTheme.contrastRatio(
+                    foregroundHex: SemrehVisualTheme.brandAccentHex(for: scheme),
+                    backgroundHex: SemrehVisualTheme.canvasHex(for: scheme)
                 ),
                 4.5
             )

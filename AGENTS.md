@@ -1,7 +1,7 @@
-# AGENTS.md — working agreement for Goku
+# AGENTS.md — working agreement for Semreh
 
-Goku is a native SwiftUI iPhone app (Xcode target/scheme `HermesMobile`, App Store
-name `Goku`) for a self-hosted `hermes-webui` server. `PROJECT_SPEC.md` is the
+Semreh is a native SwiftUI iPhone app (Xcode target/scheme `HermesMobile`, App Store
+name `Semreh`) for a self-hosted `hermes-webui` server. `PROJECT_SPEC.md` is the
 product/API source of truth — if a request conflicts with it, stop and ask.
 Read by every agent (Codex, Claude Code, …); keep it tool-agnostic.
 
@@ -56,14 +56,14 @@ Read by every agent (Codex, Claude Code, …); keep it tool-agnostic.
   build + launch the app for the human's manual simulator test when UI changed.
 
 ## App identity (resolved via xcconfig — not grep-able)
-Bundle ID `com.jacobmoore.goku` · tests `….tests` · Team `U8G25F98S2` · SKU `goku-ios`.
+Bundle ID `com.jacobmoore.semreh` · tests `….tests` · Team `U8G25F98S2` · SKU `semreh-ios`.
 
 ## "push to branch testflight" (maintainer-only)
-Upload the current branch to the side-by-side **Goku Branch** internal TestFlight app
-(`com.jacobmoore.goku.branch`) — a TestFlight upload, **not** a git push.
+Upload the current branch to the side-by-side **Semreh Branch** internal TestFlight app
+(`com.jacobmoore.semreh.branch`) — a TestFlight upload, **not** a git push.
 Requires the maintainer's App Store Connect access; contributors never need this. Use a
 unique `CURRENT_PROJECT_VERSION` (e.g. `YYYYMMDDHHMM`) each time. Full commands + branch
-identity: `DEVELOPMENT.md`. Never touch the production `com.jacobmoore.goku` app
+identity: `DEVELOPMENT.md`. Never touch the production `com.jacobmoore.semreh` app
 unless explicitly asked.
 
 ## Working with the human

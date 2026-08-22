@@ -7,11 +7,11 @@
 
 DEVELOPMENT_TEAM = U8G25F98S2
 APP_IDENTIFIER_SUFFIX =
-APP_BUNDLE_IDENTIFIER = com.jacobmoore.goku$(APP_IDENTIFIER_SUFFIX)
-APP_GROUP_IDENTIFIER = group.com.jacobmoore.goku$(APP_IDENTIFIER_SUFFIX)
+APP_BUNDLE_IDENTIFIER = com.jacobmoore.semreh$(APP_IDENTIFIER_SUFFIX)
+APP_GROUP_IDENTIFIER = group.com.jacobmoore.semreh$(APP_IDENTIFIER_SUFFIX)
 
 // Fork identity. Per-machine Local.xcconfig remains the final override layer.
-#include "Goku.xcconfig"
+#include "Semreh.xcconfig"
 
 // Optional per-machine overrides. This include must stay last: later
 // assignments win, so Local.xcconfig values override the defaults above.

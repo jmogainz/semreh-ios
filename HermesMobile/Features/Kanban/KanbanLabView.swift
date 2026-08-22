@@ -148,7 +148,7 @@ struct KanbanStatusFocusView: View {
                 )
             case .incompatibleContract:
                 unavailableContent(
-                    title: String(localized: "This server's Kanban response is incompatible with Goku."),
+                    title: String(localized: "This server's Kanban response is incompatible with Semreh."),
                     detail: String(localized: "No Kanban changes were made."),
                     systemImage: "exclamationmark.triangle"
                 )
@@ -446,7 +446,7 @@ struct KanbanStatusFocusView: View {
             }
 
             if dispatch.phase == .outcomeUncertain {
-                Text("Goku refreshed the Board, but cannot prove whether workers started. Review the current Board before running Dispatcher again.")
+                Text("Semreh refreshed the Board, but cannot prove whether workers started. Review the current Board before running Dispatcher again.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 if dispatch.canAcknowledgeUncertainOutcome {
@@ -462,7 +462,7 @@ struct KanbanStatusFocusView: View {
                 .font(.footnote.weight(.semibold))
                 .frame(minHeight: 44)
             } else if dispatch.phase == .refused {
-                Text("The server refused this Dispatcher request. Goku did not retry it.")
+                Text("The server refused this Dispatcher request. Semreh did not retry it.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else if dispatch.phase == .boardUnavailable {
@@ -1430,11 +1430,11 @@ private struct KanbanBoardManagementView: View {
                     boardRow(board)
                 }
             } footer: {
-                Text("Browsing a Board stays local to Goku. Making a Board active changes shared server state.")
+                Text("Browsing a Board stays local to Semreh. Making a Board active changes shared server state.")
             }
         }
         .scrollContentBackground(.hidden)
-        .background { GokuBackdrop().ignoresSafeArea() }
+        .background { SemrehBackdrop().ignoresSafeArea() }
         .navigationTitle("Manage")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -1471,7 +1471,7 @@ private struct KanbanBoardManagementView: View {
                 Task { await model.archiveBoard(slug: board.slug ?? "") }
             }
         } message: { _ in
-            Text("Goku cannot restore an archived Board in-app.")
+            Text("Semreh cannot restore an archived Board in-app.")
         }
         .alert(
             "Make Active Board",
@@ -1530,7 +1530,7 @@ private struct KanbanBoardManagementView: View {
                 )
             )
             .accessibilityHint(
-                Text("Browsing a Board stays local to Goku. Making a Board active changes shared server state.")
+                Text("Browsing a Board stays local to Semreh. Making a Board active changes shared server state.")
             )
         } else {
             boardRowContent(board, presentation: presentation)
@@ -1762,7 +1762,7 @@ private struct KanbanBoardEditorView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background { GokuBackdrop().ignoresSafeArea() }
+        .background { SemrehBackdrop().ignoresSafeArea() }
         .navigationTitle(isEditing ? "Edit" : "Create")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -1878,7 +1878,7 @@ private struct KanbanBulkActionsView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background { GokuBackdrop().ignoresSafeArea() }
+            .background { SemrehBackdrop().ignoresSafeArea() }
             .navigationTitle("Bulk Actions")
             .navigationBarTitleDisplayMode(.inline)
             .interactiveDismissDisabled(model.bulkActionPhase != nil)
@@ -1960,7 +1960,7 @@ private struct KanbanFiltersView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background { GokuBackdrop().ignoresSafeArea() }
+            .background { SemrehBackdrop().ignoresSafeArea() }
             .navigationTitle("Card Filters")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -2277,7 +2277,7 @@ struct KanbanView: View {
 
     var body: some View {
         KanbanStatusFocusView(model: model)
-            .background { GokuBackdrop().ignoresSafeArea() }
+            .background { SemrehBackdrop().ignoresSafeArea() }
             .task {
                 await model.load()
             }

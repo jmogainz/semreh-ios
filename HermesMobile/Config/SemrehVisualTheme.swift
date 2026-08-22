@@ -1,7 +1,7 @@
 import SwiftUI
 
 private struct AppColorPaletteKey: EnvironmentKey {
-    static let defaultValue = AppColorPalette.goku
+    static let defaultValue = AppColorPalette.semreh
 }
 
 extension EnvironmentValues {
@@ -11,9 +11,9 @@ extension EnvironmentValues {
     }
 }
 
-/// Product-wide semantic palette. Goku stays the default; named themes swap
+/// Product-wide semantic palette. Semreh stays the default; named themes swap
 /// canvas/action/energy tokens while keeping the same roles and contrast rules.
-enum GokuVisualTheme {
+enum SemrehVisualTheme {
     static let giOrangeHex = "#F47A21"
     static let royalBlueHex = "#2166F3"
     static let energyGoldHex = "#FFD54A"
@@ -30,67 +30,67 @@ enum GokuVisualTheme {
     static let energy = energyGold
     static let primaryActionForeground = Color(hexRGB: primaryActionForegroundHex)!
 
-    static func canvasHex(for colorScheme: ColorScheme, palette: AppColorPalette = .goku) -> String {
+    static func canvasHex(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> String {
         tokens(for: palette).canvasHex(for: colorScheme)
     }
 
-    static func panelHex(for colorScheme: ColorScheme, palette: AppColorPalette = .goku) -> String {
+    static func panelHex(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> String {
         tokens(for: palette).panelHex(for: colorScheme)
     }
 
-    static func actionHex(for colorScheme: ColorScheme, palette: AppColorPalette = .goku) -> String {
+    static func actionHex(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> String {
         tokens(for: palette).actionHex(for: colorScheme)
     }
 
-    static func action(for colorScheme: ColorScheme, palette: AppColorPalette = .goku) -> Color {
+    static func action(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> Color {
         Color(hexRGB: actionHex(for: colorScheme, palette: palette))!
     }
 
-    static func accentForegroundHex(for colorScheme: ColorScheme, palette: AppColorPalette = .goku) -> String {
+    static func accentForegroundHex(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> String {
         tokens(for: palette).accentForegroundHex(for: colorScheme)
     }
 
-    static func accentForeground(for colorScheme: ColorScheme, palette: AppColorPalette = .goku) -> Color {
+    static func accentForeground(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> Color {
         Color(hexRGB: accentForegroundHex(for: colorScheme, palette: palette))!
     }
 
-    static func brandAccentHex(for colorScheme: ColorScheme, palette: AppColorPalette = .goku) -> String {
+    static func brandAccentHex(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> String {
         tokens(for: palette).brandAccentHex(for: colorScheme)
     }
 
-    static func brandAccent(for colorScheme: ColorScheme, palette: AppColorPalette = .goku) -> Color {
+    static func brandAccent(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> Color {
         Color(hexRGB: brandAccentHex(for: colorScheme, palette: palette))!
     }
 
-    static func canvas(for colorScheme: ColorScheme, palette: AppColorPalette = .goku) -> Color {
+    static func canvas(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> Color {
         Color(hexRGB: canvasHex(for: colorScheme, palette: palette))!
     }
 
-    static func panel(for colorScheme: ColorScheme, palette: AppColorPalette = .goku) -> Color {
+    static func panel(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> Color {
         Color(hexRGB: panelHex(for: colorScheme, palette: palette))!
     }
 
-    static func raisedPanel(for colorScheme: ColorScheme, palette: AppColorPalette = .goku) -> Color {
+    static func raisedPanel(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> Color {
         Color(hexRGB: tokens(for: palette).raisedHex(for: colorScheme))!
     }
 
-    static func energyHex(for palette: AppColorPalette = .goku) -> String {
+    static func energyHex(for palette: AppColorPalette = .semreh) -> String {
         tokens(for: palette).energyHex
     }
 
-    static func energy(for palette: AppColorPalette = .goku) -> Color {
+    static func energy(for palette: AppColorPalette = .semreh) -> Color {
         Color(hexRGB: energyHex(for: palette))!
     }
 
-    static func energyForegroundHex(for palette: AppColorPalette = .goku) -> String {
+    static func energyForegroundHex(for palette: AppColorPalette = .semreh) -> String {
         tokens(for: palette).energyForegroundHex
     }
 
-    static func energyForeground(for palette: AppColorPalette = .goku) -> Color {
+    static func energyForeground(for palette: AppColorPalette = .semreh) -> Color {
         Color(hexRGB: energyForegroundHex(for: palette))!
     }
 
-    static func brandActionColor(for palette: AppColorPalette = .goku) -> Color {
+    static func brandActionColor(for palette: AppColorPalette = .semreh) -> Color {
         Color(hexRGB: tokens(for: palette).brandActionHex)!
     }
 
@@ -109,7 +109,7 @@ enum GokuVisualTheme {
     static func navigationBarBackground(
         for colorScheme: ColorScheme,
         reduceTransparency: Bool,
-        palette: AppColorPalette = .goku
+        palette: AppColorPalette = .semreh
     ) -> Color {
         canvas(for: colorScheme, palette: palette).opacity(navigationBarOpacity(
             for: colorScheme,
@@ -133,7 +133,7 @@ enum GokuVisualTheme {
     static func subtleStroke(
         for colorScheme: ColorScheme,
         increasedContrast: Bool = false,
-        palette: AppColorPalette = .goku
+        palette: AppColorPalette = .semreh
     ) -> Color {
         action(for: colorScheme, palette: palette).opacity(panelStrokeOpacity(
             for: colorScheme,
@@ -142,7 +142,7 @@ enum GokuVisualTheme {
     }
 
     static var brandGradient: LinearGradient {
-        brandGradient(for: .goku)
+        brandGradient(for: .semreh)
     }
 
     static func brandGradient(for palette: AppColorPalette) -> LinearGradient {
@@ -158,7 +158,7 @@ enum GokuVisualTheme {
     }
 
     static var energyGradient: LinearGradient {
-        energyGradient(for: .goku)
+        energyGradient(for: .semreh)
     }
 
     static func energyGradient(for palette: AppColorPalette) -> LinearGradient {
@@ -186,7 +186,7 @@ enum GokuVisualTheme {
 
     static func tokens(for palette: AppColorPalette) -> VisualThemeTokens {
         switch palette {
-        case .goku:
+        case .semreh:
             VisualThemeTokens(
                 brandActionHex: giOrangeHex,
                 energyHex: energyGoldHex,
@@ -358,26 +358,26 @@ struct VisualThemeTokens: Equatable {
     }
 }
 
-struct GokuBackdrop: View {
+struct SemrehBackdrop: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.appColorPalette) private var palette
 
     var body: some View {
-        let tokens = GokuVisualTheme.tokens(for: palette)
+        let tokens = SemrehVisualTheme.tokens(for: palette)
         ZStack {
-            GokuVisualTheme.canvas(for: colorScheme, palette: palette)
+            SemrehVisualTheme.canvas(for: colorScheme, palette: palette)
 
             if !reduceTransparency {
                 LinearGradient(
                     colors: colorScheme == .dark
                         ? [
-                            GokuVisualTheme.canvas(for: .dark, palette: palette),
+                            SemrehVisualTheme.canvas(for: .dark, palette: palette),
                             Color(hexRGB: tokens.backdropMidDarkHex)!,
-                            GokuVisualTheme.canvas(for: .dark, palette: palette)
+                            SemrehVisualTheme.canvas(for: .dark, palette: palette)
                         ]
                         : [
-                            GokuVisualTheme.canvas(for: .light, palette: palette),
+                            SemrehVisualTheme.canvas(for: .light, palette: palette),
                             Color(hexRGB: tokens.backdropMidLightHex)!,
                             Color(hexRGB: tokens.raisedLightHex)!
                         ],
@@ -387,7 +387,7 @@ struct GokuBackdrop: View {
 
                 RadialGradient(
                     colors: [
-                        GokuVisualTheme.brandActionColor(for: palette)
+                        SemrehVisualTheme.brandActionColor(for: palette)
                             .opacity(colorScheme == .dark ? 0.16 : 0.10),
                         .clear
                     ],
@@ -398,7 +398,7 @@ struct GokuBackdrop: View {
 
                 RadialGradient(
                     colors: [
-                        GokuVisualTheme.action(for: colorScheme, palette: palette)
+                        SemrehVisualTheme.action(for: colorScheme, palette: palette)
                             .opacity(colorScheme == .dark ? 0.18 : 0.08),
                         .clear
                     ],
@@ -413,7 +413,7 @@ struct GokuBackdrop: View {
     }
 }
 
-private struct GokuAppThemeModifier: ViewModifier {
+private struct SemrehAppThemeModifier: ViewModifier {
     @AppStorage(AppTheme.storageKey) private var appThemeRawValue = AppTheme.system.rawValue
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -425,10 +425,10 @@ private struct GokuAppThemeModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .environment(\.appColorPalette, palette)
-            .tint(GokuVisualTheme.action(for: colorScheme, palette: palette))
-            .background { GokuBackdrop().ignoresSafeArea() }
+            .tint(SemrehVisualTheme.action(for: colorScheme, palette: palette))
+            .background { SemrehBackdrop().ignoresSafeArea() }
             .toolbarBackground(
-                GokuVisualTheme.navigationBarBackground(
+                SemrehVisualTheme.navigationBarBackground(
                     for: colorScheme,
                     reduceTransparency: reduceTransparency,
                     palette: palette
@@ -439,7 +439,7 @@ private struct GokuAppThemeModifier: ViewModifier {
     }
 }
 
-private struct GokuPanelModifier: ViewModifier {
+private struct SemrehPanelModifier: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -452,15 +452,15 @@ private struct GokuPanelModifier: ViewModifier {
             .background {
                 shape.fill(
                     reduceTransparency
-                        ? GokuVisualTheme.panel(for: colorScheme, palette: palette)
-                        : GokuVisualTheme.panel(for: colorScheme, palette: palette)
+                        ? SemrehVisualTheme.panel(for: colorScheme, palette: palette)
+                        : SemrehVisualTheme.panel(for: colorScheme, palette: palette)
                             .opacity(colorScheme == .dark ? 0.78 : 0.82)
                 )
             }
             .overlay {
                 shape
                     .stroke(
-                        GokuVisualTheme.subtleStroke(
+                        SemrehVisualTheme.subtleStroke(
                             for: colorScheme,
                             increasedContrast: colorSchemeContrast == .increased,
                             palette: palette
@@ -471,8 +471,8 @@ private struct GokuPanelModifier: ViewModifier {
             }
             .shadow(
                 color: colorScheme == .dark
-                    ? GokuVisualTheme.action(for: .dark, palette: palette).opacity(0.10)
-                    : GokuVisualTheme.brandActionColor(for: palette).opacity(0.07),
+                    ? SemrehVisualTheme.action(for: .dark, palette: palette).opacity(0.10)
+                    : SemrehVisualTheme.brandActionColor(for: palette).opacity(0.07),
                 radius: 16,
                 y: 7
             )
@@ -480,11 +480,11 @@ private struct GokuPanelModifier: ViewModifier {
 }
 
 extension View {
-    func gokuAppTheme() -> some View {
-        modifier(GokuAppThemeModifier())
+    func semrehAppTheme() -> some View {
+        modifier(SemrehAppThemeModifier())
     }
 
-    func gokuPanel(cornerRadius: CGFloat = 18) -> some View {
-        modifier(GokuPanelModifier(cornerRadius: cornerRadius))
+    func semrehPanel(cornerRadius: CGFloat = 18) -> some View {
+        modifier(SemrehPanelModifier(cornerRadius: cornerRadius))
     }
 }

@@ -331,7 +331,7 @@ struct SessionListView: View {
 
     private var sessionListSurface: some View {
         ZStack(alignment: .bottomTrailing) {
-            GokuBackdrop()
+            SemrehBackdrop()
                 .ignoresSafeArea()
 
             content
@@ -511,7 +511,7 @@ struct SessionListView: View {
         .environment(\.defaultMinListRowHeight, 0)
         .scrollContentBackground(.hidden)
         .scrollPosition(id: $sidebarScrollPosition)
-        .background { GokuBackdrop().ignoresSafeArea() }
+        .background { SemrehBackdrop().ignoresSafeArea() }
         .scrollDismissesKeyboard(.interactively)
         // Disclosure subrows are real List rows; drive their fold from the List
         // so insert/remove animates. Value-based so it works with @AppStorage.
@@ -526,7 +526,7 @@ struct SessionListView: View {
         .padding(.top, 28)
         .overlay(alignment: .bottom) {
             Capsule()
-                .fill(GokuVisualTheme.energyGradient(for: palette))
+                .fill(SemrehVisualTheme.energyGradient(for: palette))
                 .frame(height: 2)
                 .padding(.horizontal, 24)
                 .offset(y: 11)
@@ -979,8 +979,8 @@ struct SessionListView: View {
         searchFieldIsFocused = true
     }
 
-    private var sceneActions: GokuSceneActions {
-        GokuSceneActions(
+    private var sceneActions: SemrehSceneActions {
+        SemrehSceneActions(
             canCreateNewChat: !viewModel.isViewingCachedData && !navigationState.isCreatingNewChat,
             createNewChat: openNewChatFromKeyboard,
             searchSessions: openSearchFromKeyboard
@@ -1331,7 +1331,7 @@ enum SessionListNewChatReturn {
     }
 }
 
-struct GokuHeaderLogo: View {
+struct SemrehHeaderLogo: View {
     static let productName = ""
     static let productDescriptor = ""
     static let accessibilityLabelText = ""
@@ -1515,7 +1515,7 @@ private struct PendingNewChatView: View {
 
     private var pendingComposer: some View {
         HStack(alignment: .bottom, spacing: 10) {
-            TextField("Message Goku", text: $draftMessage, axis: .vertical)
+            TextField("Message Semreh", text: $draftMessage, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...5)
                 .focused($composerIsFocused)

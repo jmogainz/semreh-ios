@@ -1,8 +1,8 @@
 import Foundation
 
 enum AppConfig {
-    static let privacyPolicyURL = URL(staticString: "https://github.com/jmogainz/goku-ios/blob/master/PRIVACY.md")
-    static let supportURL = URL(staticString: "https://github.com/jmogainz/goku-ios/issues")
+    static let privacyPolicyURL = URL(staticString: "https://github.com/jmogainz/semreh-ios/blob/master/PRIVACY.md")
+    static let supportURL = URL(staticString: "https://github.com/jmogainz/semreh-ios/issues")
 }
 
 extension URL {

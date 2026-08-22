@@ -172,7 +172,7 @@ private struct AppIconChoicePreview: View {
 
     @ViewBuilder
     var body: some View {
-        AppIconPreviewImage(name: "GokuAppIcon", size: 44)
+        AppIconPreviewImage(name: "SemrehAppIcon", size: 44)
     }
 }
 

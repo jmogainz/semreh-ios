@@ -6,7 +6,7 @@ Please **do not** report security vulnerabilities through public GitHub issues.
 
 Instead, use GitHub's private vulnerability reporting: go to the repository's
 **Security** tab and click **Report a vulnerability** (or open
-`https://github.com/jmogainz/goku-ios/security/advisories/new`). This opens a
+`https://github.com/jmogainz/semreh-ios/security/advisories/new`). This opens a
 private security advisory that only the maintainer can see.
 
 Include as much of the following as you can:

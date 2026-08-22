@@ -309,8 +309,8 @@ final class SessionEventStreamCoordinator {
 
 struct SessionEventCursorStore {
     private let defaults: UserDefaults
-    private let keyPrefix = "goku.session-events.cursor.v1"
-    private let seenKeyPrefix = "goku.session-events.seen.v1"
+    private let keyPrefix = "semreh.session-events.cursor.v1"
+    private let seenKeyPrefix = "semreh.session-events.seen.v1"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults

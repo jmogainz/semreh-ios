@@ -1,11 +1,11 @@
-# Goku Domain
+# Semreh Domain
 
-Canonical language for Goku concepts that need consistent names across the product, planning, and support.
+Canonical language for Semreh concepts that need consistent names across the product, planning, and support.
 
 ## Kanban
 
 **Kanban**:
-The Goku destination for organizing and operating server-backed work across workflow states.
+The Semreh destination for organizing and operating server-backed work across workflow states.
 _Avoid_: Boards, Tasks
 
 **Board**:
@@ -69,7 +69,7 @@ The action that changes a Card's Status to Archived.
 _Avoid_: Delete Card, remove Card
 
 **Archive Board**:
-The action that removes a non-default Board from active use. Goku cannot restore an archived Board in-app.
+The action that removes a non-default Board from active use. Semreh cannot restore an archived Board in-app.
 _Avoid_: Delete Board, remove Board
 
 **Bulk Action**:

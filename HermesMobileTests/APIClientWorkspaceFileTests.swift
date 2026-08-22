@@ -802,7 +802,7 @@ final class APIClientWorkspaceFileTests: APIClientTestCase {
     func testFilePreviewLoadsPDFBytesFromRawEndpoint() async throws {
         let pdfData = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 320, height: 480)).pdfData { context in
             context.beginPage()
-            "Goku PDF preview".draw(at: CGPoint(x: 24, y: 24), withAttributes: nil)
+            "Semreh PDF preview".draw(at: CGPoint(x: 24, y: 24), withAttributes: nil)
         }
         let client = makeClient { request in
             XCTAssertEqual(request.url?.path, "/api/file/raw")

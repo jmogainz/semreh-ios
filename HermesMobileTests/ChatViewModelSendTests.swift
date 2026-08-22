@@ -149,7 +149,7 @@ final class ChatViewModelSendTests: XCTestCase {
 
         viewModel.toggleListening(to: context)
         // Regression (review on #35): the tap itself must NOT activate the session —
-        // a slow `/api/tts` fetch would otherwise silence other audio while Goku
+        // a slow `/api/tts` fetch would otherwise silence other audio while Semreh
         // has nothing to play. Activation belongs to the moment playback starts.
         XCTAssertEqual(audioSession.activateCount, 0)
         await viewModel.listenPreparationTask?.value
@@ -311,7 +311,7 @@ final class ChatViewModelSendTests: XCTestCase {
         XCTAssertEqual(audioSession.activateCount, 1)
         XCTAssertEqual(remoteControlCenter.configureCount, 1)
         XCTAssertEqual(remoteControlCenter.snapshots.last, ListenNowPlayingSnapshot(
-            title: "Goku response 1",
+            title: "Semreh response 1",
             duration: 83,
             elapsedTime: 0,
             speed: .normal,

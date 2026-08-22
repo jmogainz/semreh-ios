@@ -809,7 +809,7 @@ struct KanbanComment: Decodable, Equatable, Sendable {
     }
 }
 
-/// Detail events retain only the fields Goku intentionally presents. Unknown
+/// Detail events retain only the fields Semreh intentionally presents. Unknown
 /// payload keys are discarded so raw server payloads cannot reach diagnostics or
 /// generic error UI.
 struct KanbanDetailEvent: Decodable, Equatable, Sendable {
@@ -1077,7 +1077,7 @@ enum KanbanContractViolation: Error, Equatable, LocalizedError, Sendable {
     case missingCardStatus
 
     var errorDescription: String? {
-        String(localized: "This server's Kanban response is incompatible with Goku.")
+        String(localized: "This server's Kanban response is incompatible with Semreh.")
     }
 }
 
@@ -1085,7 +1085,7 @@ enum KanbanResponseError: Error, Equatable, LocalizedError, Sendable {
     case nonJSONContentType
 
     var errorDescription: String? {
-        String(localized: "This server's Kanban response is incompatible with Goku.")
+        String(localized: "This server's Kanban response is incompatible with Semreh.")
     }
 }
 

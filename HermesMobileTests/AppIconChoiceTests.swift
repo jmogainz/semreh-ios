@@ -2,21 +2,21 @@ import XCTest
 @testable import HermesMobile
 
 final class AppIconChoiceTests: XCTestCase {
-    func testGokuUsesOneCanonicalIcon() {
+    func testSemrehUsesOneCanonicalIcon() {
         XCTAssertEqual(AppIconChoice.allCases, [.system])
-        XCTAssertEqual(AppIconChoice.system.title, "Goku")
-        XCTAssertEqual(AppIconChoice.system.subtitle, "Canonical Goku icon")
+        XCTAssertEqual(AppIconChoice.system.title, "Semreh")
+        XCTAssertEqual(AppIconChoice.system.subtitle, "Canonical Semreh icon")
         XCTAssertNil(AppIconChoice.system.alternateIconName)
-        XCTAssertEqual(AppIconChoice.system.previewImageName, "GokuAppIcon")
+        XCTAssertEqual(AppIconChoice.system.previewImageName, "SemrehAppIcon")
         XCTAssertEqual(AppIconChoice.resolved(from: nil), .system)
         XCTAssertEqual(AppIconChoice.resolved(from: "LegacyAlternateIcon"), .system)
     }
 
     func testSidebarHeaderHasNoProductWordmark() throws {
-        XCTAssertFalse(GokuHeaderLogo.showsProductWordmark)
-        XCTAssertFalse(GokuHeaderLogo.showsPortraitMedallion)
-        XCTAssertTrue(GokuHeaderLogo.productName.isEmpty)
-        XCTAssertTrue(GokuHeaderLogo.productDescriptor.isEmpty)
+        XCTAssertFalse(SemrehHeaderLogo.showsProductWordmark)
+        XCTAssertFalse(SemrehHeaderLogo.showsPortraitMedallion)
+        XCTAssertTrue(SemrehHeaderLogo.productName.isEmpty)
+        XCTAssertTrue(SemrehHeaderLogo.productDescriptor.isEmpty)
 
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -27,20 +27,20 @@ final class AppIconChoiceTests: XCTestCase {
         )
         XCTAssertFalse(sessionListSource.contains("MOBILE AGENT"))
         XCTAssertFalse(sessionListSource.contains("Text(Self.productName)"))
-        XCTAssertFalse(sessionListSource.contains("GokuHeaderLogo()"))
+        XCTAssertFalse(sessionListSource.contains("SemrehHeaderLogo()"))
     }
 
-    func testPrivacyPolicyUsesGokuControlledPublicURL() {
+    func testPrivacyPolicyUsesSemrehControlledPublicURL() {
         XCTAssertEqual(
             AppConfig.privacyPolicyURL.absoluteString,
-            "https://github.com/jmogainz/goku-ios/blob/master/PRIVACY.md"
+            "https://github.com/jmogainz/semreh-ios/blob/master/PRIVACY.md"
         )
     }
 
-    func testSupportUsesGokuRepositoryIssues() {
+    func testSupportUsesSemrehRepositoryIssues() {
         XCTAssertEqual(
             AppConfig.supportURL.absoluteString,
-            "https://github.com/jmogainz/goku-ios/issues"
+            "https://github.com/jmogainz/semreh-ios/issues"
         )
     }
 

@@ -77,13 +77,13 @@ final class LocalizationCatalogTests: XCTestCase {
         }
     }
 
-    func testGokuBrandKeysDoNotReferencePreviousProductNames() throws {
+    func testSemrehBrandKeysDoNotReferencePreviousProductNames() throws {
         let data = try Data(contentsOf: catalogURL())
         let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         let strings = try XCTUnwrap(root["strings"] as? [String: Any])
-        let staleBrandPattern = try NSRegularExpression(pattern: #"\b(?:Hermes|Hermex)\b"#, options: [.caseInsensitive])
+        let staleBrandPattern = try NSRegularExpression(pattern: #"\b(?:Hermes|Hermex|Goku)\b"#, options: [.caseInsensitive])
 
-        for (key, rawEntry) in strings where key.localizedCaseInsensitiveContains("Goku") {
+        for (key, rawEntry) in strings where key.localizedCaseInsensitiveContains("Semreh") {
             guard let entry = rawEntry as? [String: Any],
                   let localizations = entry["localizations"] as? [String: Any] else { continue }
 
@@ -102,11 +102,11 @@ final class LocalizationCatalogTests: XCTestCase {
         }
     }
 
-    func testGitBranchPlaceholderUsesGokuBrand() throws {
+    func testGitBranchPlaceholderUsesSemrehBrand() throws {
         let sourceURL = resourceURL("HermesMobile/Features/Workspace/GitBranchPickerView.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-        XCTAssertTrue(source.contains("goku/my-feature"))
+        XCTAssertTrue(source.contains("semreh/my-feature"))
         XCTAssertFalse(source.localizedCaseInsensitiveContains("hermex/my-feature"))
     }
 
@@ -229,11 +229,11 @@ final class LocalizationCatalogTests: XCTestCase {
             "Browse Board",
             "Browse Board: %@",
             "Browsing",
-            "Browsing a Board stays local to Goku. Making a Board active changes shared server state.",
+            "Browsing a Board stays local to Semreh. Making a Board active changes shared server state.",
             "Check Result",
             "Choose Board",
             "Creating a Board does not make it active.",
-            "Goku cannot restore an archived Board in-app.",
+            "Semreh cannot restore an archived Board in-app.",
             "Icon",
             "Make Active Board",
             "Making this Board active changes shared server state for other Hermes clients.",
@@ -273,7 +273,7 @@ final class LocalizationCatalogTests: XCTestCase {
             "Dispatcher, result available",
             "Dispatcher is unavailable on this server.",
             "Group by Profile",
-            "Goku refreshed the Board, but cannot prove whether workers started. Review the current Board before running Dispatcher again.",
+            "Semreh refreshed the Board, but cannot prove whether workers started. Review the current Board before running Dispatcher again.",
             "I Reviewed the Board",
             "Preview Dispatch",
             "Preview is advisory and may become stale. It never starts workers.",
@@ -285,7 +285,7 @@ final class LocalizationCatalogTests: XCTestCase {
             "Skipped—No Assignee",
             "Skipped—Unknown Profile",
             "Spawned",
-            "The server refused this Dispatcher request. Goku did not retry it.",
+            "The server refused this Dispatcher request. Semreh did not retry it.",
             "This Preview is stale. Run Preview Dispatch again before relying on it.",
             "This may start up to %lld workers and consume API budget.",
             "Timed Out"
