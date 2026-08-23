@@ -647,6 +647,8 @@ private struct ChatTranscriptSkeletonLine: Identifiable {
 }
 
 struct ChatOfflineCacheBanner: View {
+    @Environment(\.appColorPalette) private var palette
+
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "wifi.slash")
@@ -658,16 +660,17 @@ struct ChatOfflineCacheBanner: View {
 
             Spacer()
         }
-        .foregroundStyle(.orange)
+        .foregroundStyle(SemrehVisualTheme.statusWarning(for: palette))
         .padding(.horizontal)
         .padding(.vertical, 10)
-        .background(Color.orange.opacity(0.12))
+        .background(SemrehVisualTheme.statusWarning(for: palette).opacity(0.12))
         .accessibilityElement(children: .combine)
     }
 }
 
 struct PinnedLocalNoticeStack: View {
     let notices: [String]
+    @Environment(\.appColorPalette) private var palette
 
     var body: some View {
         VStack(spacing: 8) {
@@ -675,7 +678,7 @@ struct PinnedLocalNoticeStack: View {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(Color.green)
+                        .foregroundStyle(SemrehVisualTheme.statusPositive(for: palette))
 
                     Text(notice)
                         .font(.footnote)

@@ -12,6 +12,7 @@ struct OnboardingConnectPage: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
     @State private var isShowingAdvanced = false
 
     private var canSubmit: Bool {
@@ -29,11 +30,11 @@ struct OnboardingConnectPage: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Connect")
                         .font(.title3.weight(.bold))
-                        .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme))
+                        .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme, palette: palette))
 
                     Text("Enter the exact HTTPS Tailscale Serve URL your agent returned, for example `https://server.tailnet-name.ts.net`.")
                         .font(.footnote)
-                        .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme))
+                        .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme, palette: palette))
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -42,7 +43,7 @@ struct OnboardingConnectPage: View {
                         ZStack(alignment: .leading) {
                             if viewModel.serverURLString.isEmpty {
                                 Text(verbatim: "https://server.tailnet-name.ts.net")
-                                    .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme))
+                                    .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme, palette: palette))
                                     .allowsHitTesting(false)
                             }
 
@@ -50,9 +51,9 @@ struct OnboardingConnectPage: View {
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
                                 .keyboardType(.URL)
-                                .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme))
+                                .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme, palette: palette))
                                 .submitLabel(.go)
-                                .tint(OnboardingTheme.action(for: colorScheme))
+                                .tint(OnboardingTheme.action(for: colorScheme, palette: palette))
                                 .focused($focusedField, equals: .serverURL)
                                 .onSubmit(submitConnection)
                         }
@@ -64,7 +65,7 @@ struct OnboardingConnectPage: View {
                                 "",
                                 text: $viewModel.password,
                                 prompt: Text("Server password")
-                                    .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme))
+                                    .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme, palette: palette))
                             )
                             .textContentType(.password)
                             .submitLabel(.go)
@@ -75,20 +76,23 @@ struct OnboardingConnectPage: View {
                 }
 
                 DisclosureGroup(isExpanded: $isShowingAdvanced) {
-                    CustomHeadersEditor(headers: $viewModel.customHeaders, style: .onboarding)
+                    CustomHeadersEditor(
+                        headers: $viewModel.customHeaders,
+                        style: .onboarding(for: colorScheme, palette: palette)
+                    )
                         .padding(.top, 10)
                 } label: {
                     Label("Advanced", systemImage: "slider.horizontal.3")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme).opacity(0.86))
+                        .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme, palette: palette).opacity(0.86))
                 }
-                .tint(OnboardingTheme.action(for: colorScheme).opacity(0.72))
+                .tint(OnboardingTheme.action(for: colorScheme, palette: palette).opacity(0.72))
 
                 if viewModel.isWorking {
                     OnboardingStatusBanner(
                         text: String(localized: "Checking server..."),
                         systemImage: "arrow.triangle.2.circlepath",
-                        tint: OnboardingTheme.action(for: colorScheme),
+                        tint: OnboardingTheme.action(for: colorScheme, palette: palette),
                         showsProgress: true
                     )
                 }
@@ -97,7 +101,7 @@ struct OnboardingConnectPage: View {
                     OnboardingStatusBanner(
                         text: connectionMessage,
                         systemImage: "checkmark.circle.fill",
-                        tint: Color(red: 0.45, green: 0.92, blue: 0.56)
+                        tint: SemrehVisualTheme.statusPositive(for: .semreh)
                     )
                 }
 
@@ -105,7 +109,7 @@ struct OnboardingConnectPage: View {
                     OnboardingStatusBanner(
                         text: errorMessage,
                         systemImage: "exclamationmark.triangle.fill",
-                        tint: Color(red: 1.0, green: 0.47, blue: 0.34)
+                        tint: SemrehVisualTheme.statusCritical(for: .semreh)
                     )
                 }
             }

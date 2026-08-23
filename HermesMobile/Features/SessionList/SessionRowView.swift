@@ -302,37 +302,40 @@ private enum SessionRowStateBadgeKind: String, Identifiable {
         }
     }
 
-    var tint: Color {
-        switch self {
-        case .streaming:
-            return .green
-        case .cached:
-            return .orange
-        }
-    }
 }
 
 private struct SessionRowStateBadge: View {
     let badge: SessionRowStateBadgeKind
+    @Environment(\.appColorPalette) private var palette
+
+    private var tint: Color {
+        switch badge {
+        case .streaming:
+            SemrehVisualTheme.statusPositive(for: palette)
+        case .cached:
+            SemrehVisualTheme.statusInfo(for: .light, palette: palette).opacity(0.72)
+        }
+    }
 
     var body: some View {
         Text(badge.title)
             .font(AppFont.caption2(weight: .semibold))
-            .foregroundStyle(badge.tint)
+            .foregroundStyle(tint)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
-            .background(badge.tint.opacity(0.12), in: Capsule())
+            .background(tint.opacity(0.12), in: Capsule())
             .accessibilityHidden(true)
     }
 }
 
 private struct ActiveSessionStreamingIndicator: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.appColorPalette) private var palette
     @State private var isExpanded = false
 
     var body: some View {
         Circle()
-            .fill(.green)
+            .fill(SemrehVisualTheme.statusPositive(for: palette))
             .frame(width: 9, height: 9)
             .scaleEffect(reduceMotion ? 1 : (isExpanded ? 1.4 : 1.0))
             .accessibilityHidden(true)
