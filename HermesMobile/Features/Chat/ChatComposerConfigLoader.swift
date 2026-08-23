@@ -7,12 +7,16 @@ struct ChatComposerConfigState: Equatable, Sendable {
     var currentProfile: String?
     var selectedProfileName: String?
     var selectedReasoningEffort: String?
+    var sessionReasoningEffort: String?
     /// Model-aware effort vocabulary (`supported_efforts`); `nil` on older
     /// servers → composer falls back to the full static list (issue #18).
     var supportedReasoningEfforts: [String]?
     /// `supports_reasoning_effort`; `false` hides the effort control, `nil`
     /// (older servers) keeps it visible.
     var supportsReasoningEffort: Bool?
+    /// `session_scoped_reasoning`; `true` permits effort writes to carry the
+    /// active canonical Hermes session ID. `nil` is the legacy-server fallback.
+    var sessionScopedReasoning: Bool?
     var modelCatalogGroups: [ModelCatalogGroup]
     var agentCommands: [AgentCommand]
     var workspaceRoots: [WorkspaceRoot]
@@ -27,8 +31,10 @@ struct ChatComposerConfigState: Equatable, Sendable {
         currentProfile: String? = nil,
         selectedProfileName: String? = nil,
         selectedReasoningEffort: String? = nil,
+        sessionReasoningEffort: String? = nil,
         supportedReasoningEfforts: [String]? = nil,
         supportsReasoningEffort: Bool? = nil,
+        sessionScopedReasoning: Bool? = nil,
         modelCatalogGroups: [ModelCatalogGroup] = [],
         agentCommands: [AgentCommand] = [],
         workspaceRoots: [WorkspaceRoot] = [],
@@ -42,8 +48,10 @@ struct ChatComposerConfigState: Equatable, Sendable {
         self.currentProfile = currentProfile
         self.selectedProfileName = selectedProfileName
         self.selectedReasoningEffort = selectedReasoningEffort
+        self.sessionReasoningEffort = sessionReasoningEffort
         self.supportedReasoningEfforts = supportedReasoningEfforts
         self.supportsReasoningEffort = supportsReasoningEffort
+        self.sessionScopedReasoning = sessionScopedReasoning
         self.modelCatalogGroups = modelCatalogGroups
         self.agentCommands = agentCommands
         self.workspaceRoots = workspaceRoots
@@ -65,7 +73,10 @@ struct ChatComposerConfigLoader {
         self.client = client
     }
 
-    func loadConfiguration(from initialState: ChatComposerConfigState) async -> ChatComposerConfigLoadResult {
+    func loadConfiguration(
+        from initialState: ChatComposerConfigState,
+        sessionID: String? = nil
+    ) async -> ChatComposerConfigLoadResult {
         var state = initialState
         var configurationError: Error?
 
@@ -116,11 +127,15 @@ struct ChatComposerConfigLoader {
             // the server's already-coerced value for that model.
             let reasoningResponse = try await client.reasoning(
                 model: Self.nonEmpty(state.currentModel),
-                provider: Self.nonEmpty(state.currentModelProvider)
+                provider: Self.nonEmpty(state.currentModelProvider),
+                sessionEffort: state.sessionReasoningEffort
             )
             state.selectedReasoningEffort = reasoningResponse.effectiveEffort
+            state.sessionReasoningEffort = reasoningResponse.normalizedSessionReasoningEffort
+                ?? state.sessionReasoningEffort
             state.supportedReasoningEfforts = reasoningResponse.normalizedSupportedEfforts
             state.supportsReasoningEffort = reasoningResponse.supportsReasoningEffort
+            state.sessionScopedReasoning = reasoningResponse.sessionScopedReasoning
 
             let workspaceResponse = try await client.workspaces()
             state.workspaceRoots = workspaceResponse.workspaces ?? []

@@ -99,6 +99,9 @@ struct MessageComposerView: View {
     let selectedReasoningEffort: String?
     /// Model-aware effort vocabulary; `nil` → full static list (issue #18).
     let supportedReasoningEfforts: [String]?
+    /// Adds the session-only inheritance action when the server explicitly
+    /// supports session-scoped reasoning writes.
+    let sessionScopedReasoning: Bool
     /// When false the model has no effort control — hide the reasoning menu.
     let showsReasoningControl: Bool
     let isUpdatingConfiguration: Bool
@@ -274,6 +277,7 @@ struct MessageComposerView: View {
                             skillSuggestions: skillSuggestions,
                             agentCommands: agentCommands,
                             selectedReasoningEffort: selectedReasoningEffort,
+                            supportedReasoningEfforts: supportedReasoningEfforts,
                             onSelectCommand: { command in
                                 draftMessage = "/\(command.name) "
                             },
@@ -823,6 +827,7 @@ struct MessageComposerView: View {
         ComposerReasoningMenu(
             selectedReasoningEffort: selectedReasoningEffort,
             supportedEfforts: supportedReasoningEfforts,
+            includeInherit: sessionScopedReasoning,
             reasoningTitle: reasoningTitle,
             isDisabled: isConfigurationControlDisabled,
             width: reasoningControlWidth,

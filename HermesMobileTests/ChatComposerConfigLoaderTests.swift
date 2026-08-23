@@ -166,6 +166,77 @@ final class ChatComposerConfigLoaderTests: APIClientTestCase {
         XCTAssertEqual(result.state.supportsReasoningEffort, true)
     }
 
+    func testLoadUsesEachActiveSessionForEffectiveReasoningValue() async throws {
+        var reasoningSessionEfforts: [String?] = []
+        let client = makeClient { request in
+            switch request.url?.path {
+            case "/api/profiles":
+                return apiTestJSONResponse("""
+                {
+                  "active": "default",
+                  "profiles": [
+                    {"name": "default", "model": "gpt-5.4", "provider": "openai", "is_default": true}
+                  ]
+                }
+                """, for: request)
+            case "/api/models":
+                return apiTestJSONResponse("""
+                {
+                  "default_model": "gpt-5.4",
+                  "groups": [
+                    {
+                      "name": "OpenAI",
+                      "provider_id": "openai",
+                      "models": [{"id": "gpt-5.4", "name": "GPT 5.4"}]
+                    }
+                  ]
+                }
+                """, for: request)
+            case "/api/reasoning":
+                let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+                let query = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value) })
+                XCTAssertNil(query["session_id"])
+                let effort = try XCTUnwrap(query["session_effort"] ?? nil)
+                reasoningSessionEfforts.append(effort)
+                let response = """
+                {"reasoning_effort":"\(effort)","supported_efforts":["low","high"],"supports_reasoning_effort":true,"session_scoped_reasoning":true}
+                """
+                return apiTestJSONResponse(response, for: request)
+            case "/api/workspaces":
+                return apiTestJSONResponse(#"{"workspaces": []}"#, for: request)
+            case "/api/commands":
+                return apiTestJSONResponse(#"{"commands": []}"#, for: request)
+            default:
+                XCTFail("Unexpected request path: \(request.url?.path ?? "nil")")
+                throw URLError(.badURL)
+            }
+        }
+
+        let alphaState = ChatComposerConfigState(
+            currentWorkspace: "/tmp/workspace",
+            currentModel: "gpt-5.4",
+            currentModelProvider: "openai",
+            sessionReasoningEffort: "low"
+        )
+        let betaState = ChatComposerConfigState(
+            currentWorkspace: "/tmp/workspace",
+            currentModel: "gpt-5.4",
+            currentModelProvider: "openai",
+            sessionReasoningEffort: "high"
+        )
+        let loader = ChatComposerConfigLoader(client: client)
+        let alpha = await loader.loadConfiguration(from: alphaState, sessionID: "session-alpha")
+        let beta = await loader.loadConfiguration(from: betaState, sessionID: "session-beta")
+
+        XCTAssertNil(alpha.configurationError)
+        XCTAssertNil(beta.configurationError)
+        XCTAssertEqual(alpha.state.selectedReasoningEffort, "low")
+        XCTAssertEqual(beta.state.selectedReasoningEffort, "high")
+        XCTAssertEqual(alpha.state.sessionScopedReasoning, true)
+        XCTAssertEqual(beta.state.sessionScopedReasoning, true)
+        XCTAssertEqual(reasoningSessionEfforts, ["low", "high"])
+    }
+
     func testLoadReturnsPartialStateAndStillRefreshesCommandsWhenConfigurationFails() async throws {
         var requestPaths: [String] = []
         let client = makeClient { request in
@@ -253,13 +324,34 @@ final class ReasoningEffortGatingTests: XCTestCase {
     func testOptionsFallBackToStaticListWithoutServerVocabulary() {
         XCTAssertEqual(
             ReasoningEffortOption.options(forSupportedEfforts: nil).map(\.id),
-            ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+            ["none", "minimal", "low", "medium", "high", "xhigh"]
         )
-        // Defensive: an empty list also falls back (the control is hidden
-        // before this is rendered because supports_reasoning_effort is false).
+        // Defensive: an empty list also falls back without exposing Max.
         XCTAssertEqual(
             ReasoningEffortOption.options(forSupportedEfforts: []).map(\.id),
-            ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+            ["none", "minimal", "low", "medium", "high", "xhigh"]
+        )
+    }
+
+    func testOptionsExposeInheritOnlyForSessionScopedServers() {
+        XCTAssertEqual(
+            ReasoningEffortOption.options(
+                forSupportedEfforts: ["low", "max"],
+                includeInherit: false
+            ).map(\.id),
+            ["low", "max"]
+        )
+        XCTAssertEqual(
+            ReasoningEffortOption.options(
+                forSupportedEfforts: ["low", "max"],
+                includeInherit: true
+            ).map(\.id),
+            [ReasoningEffortOption.inheritID, "low", "max"]
+        )
+        XCTAssertEqual(ReasoningEffortOption.title(for: ReasoningEffortOption.inheritID), "Default")
+        XCTAssertEqual(
+            ReasoningEffortOption.options(forSupportedEfforts: ["low", "max"], includeInherit: true).first?.title,
+            "Default"
         )
     }
 

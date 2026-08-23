@@ -185,6 +185,12 @@ enum SlashCommandCatalog {
         allCommands.first { $0.name.lowercased() == name.lowercased() }
     }
 
-    static let reasoningLevels = ["show", "hide", "none", "minimal", "low", "medium", "high", "xhigh"]
+    static let reasoningLevels = ["show", "hide", "none", "minimal", "low", "medium", "high", "xhigh", "inherit"]
+
+    static func availableReasoningLevels(forSupportedEfforts supportedEfforts: [String]?) -> [String] {
+        ReasoningEffortOption.options(forSupportedEfforts: supportedEfforts)
+            .map(\.id)
+            .filter { $0 != ReasoningEffortOption.inheritID }
+    }
     static let goalActions = ["status", "pause", "resume", "clear"]
 }

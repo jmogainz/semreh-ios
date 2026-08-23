@@ -428,19 +428,30 @@ final class ChatViewModel {
     private(set) var isSingleProfileMode = false
     private(set) var selectedProfileName: String?
     private(set) var selectedReasoningEffort: String?
+    /// Raw per-session override; nil means this session inherits the profile value.
+    private(set) var sessionReasoningEffort: String?
     /// Model-aware effort vocabulary (`supported_efforts` from `GET /api/reasoning`).
     /// `nil` on older servers → the composer falls back to the static list (issue #18).
     private(set) var supportedReasoningEfforts: [String]?
     /// `supports_reasoning_effort`; `false` hides the composer effort control.
     private(set) var supportsReasoningEffort: Bool?
+    /// `session_scoped_reasoning`; only an explicit `true` authorizes a
+    /// session-bearing effort POST. `nil` preserves legacy global behavior.
+    private(set) var sessionScopedReasoning: Bool?
     /// Drops out-of-order `GET /api/reasoning` responses after rapid model switches
     /// so the gating never reflects a stale model (upstream #3750 class of bug).
     private var reasoningGatingFetchToken = 0
+    /// Drops an effort-write response after a newer effort selection starts.
+    private var reasoningSelectionToken = 0
     var showsReasoningEffortControl: Bool {
         ReasoningEffortOption.showsEffortControl(
             supportsReasoningEffort: supportsReasoningEffort,
             supportedEfforts: supportedReasoningEfforts
         )
+    }
+    var selectedReasoningSelection: String? {
+        guard sessionScopedReasoning == true else { return selectedReasoningEffort }
+        return sessionReasoningEffort ?? ReasoningEffortOption.inheritID
     }
     private(set) var isLoadingComposerConfiguration = false
     private(set) var isUpdatingComposerConfiguration = false
@@ -584,6 +595,7 @@ final class ChatViewModel {
         currentModel = session.model
         currentModelProvider = session.modelProvider
         currentProfile = session.profile
+        sessionReasoningEffort = Self.nonEmpty(session.reasoningEffort)
         isCLISession = session.isCliSession == true
         self.server = server
         let resolvedClient = client ?? APIClient(baseURL: server)
@@ -964,6 +976,13 @@ final class ChatViewModel {
         Self.nonEmpty(selectedProfileName) ?? Self.nonEmpty(currentProfile)
     }
 
+    /// The canonical Hermes session ID is the server-provided `session_id`.
+    /// `SessionSummary.id` may be a local synthetic fallback and must never be
+    /// sent as a session-scoped reasoning identity.
+    private var canonicalSessionID: String? {
+        Self.nonEmpty(sessionID)
+    }
+
     private var requestModelProvider: String? {
         Self.nonEmpty(currentModelProvider)
     }
@@ -994,7 +1013,7 @@ final class ChatViewModel {
 
             let initialState = composerConfigurationState
             let result = await ChatComposerConfigLoader(client: client)
-                .loadConfiguration(from: initialState)
+                .loadConfiguration(from: initialState, sessionID: canonicalSessionID)
 
             guard composerConfigurationState == initialState else {
                 needsComposerConfigurationReload = true
@@ -1035,8 +1054,10 @@ final class ChatViewModel {
             currentProfile: currentProfile,
             selectedProfileName: selectedProfileName,
             selectedReasoningEffort: selectedReasoningEffort,
+            sessionReasoningEffort: sessionReasoningEffort,
             supportedReasoningEfforts: supportedReasoningEfforts,
             supportsReasoningEffort: supportsReasoningEffort,
+            sessionScopedReasoning: sessionScopedReasoning,
             modelCatalogGroups: modelCatalogGroups,
             agentCommands: agentCommands,
             workspaceRoots: workspaceRoots,
@@ -1053,8 +1074,10 @@ final class ChatViewModel {
         currentProfile = state.currentProfile
         selectedProfileName = state.selectedProfileName
         selectedReasoningEffort = state.selectedReasoningEffort
+        sessionReasoningEffort = state.sessionReasoningEffort
         supportedReasoningEfforts = state.supportedReasoningEfforts
         supportsReasoningEffort = state.supportsReasoningEffort
+        sessionScopedReasoning = state.sessionScopedReasoning
         modelCatalogGroups = state.modelCatalogGroups
         agentCommands = state.agentCommands
         workspaceRoots = state.workspaceRoots
@@ -1129,22 +1152,36 @@ final class ChatViewModel {
 
         reasoningGatingFetchToken += 1
         let token = reasoningGatingFetchToken
+        let expectedSessionID = canonicalSessionID
+        let expectedModel = currentModel
+        let expectedProvider = currentModelProvider
 
         guard let response = try? await client.reasoning(
             model: Self.nonEmpty(currentModel),
-            provider: Self.nonEmpty(currentModelProvider)
+            provider: Self.nonEmpty(currentModelProvider),
+            sessionEffort: sessionReasoningEffort
         ) else {
-            if token == reasoningGatingFetchToken {
+            if token == reasoningGatingFetchToken,
+               expectedSessionID == canonicalSessionID,
+               expectedModel == currentModel,
+               expectedProvider == currentModelProvider {
                 supportedReasoningEfforts = nil
                 supportsReasoningEffort = nil
+                sessionScopedReasoning = nil
             }
             return
         }
 
-        guard token == reasoningGatingFetchToken else { return }
+        guard token == reasoningGatingFetchToken,
+              expectedSessionID == canonicalSessionID,
+              expectedModel == currentModel,
+              expectedProvider == currentModelProvider
+        else { return }
 
         supportedReasoningEfforts = response.normalizedSupportedEfforts
         supportsReasoningEffort = response.supportsReasoningEffort
+        sessionScopedReasoning = response.sessionScopedReasoning
+        sessionReasoningEffort = response.normalizedSessionReasoningEffort
 
         if let selected = Self.nonEmpty(selectedReasoningEffort)?.lowercased(),
            let supported = supportedReasoningEfforts,
@@ -1341,7 +1378,14 @@ final class ChatViewModel {
         let selectedEffort = effort.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !selectedEffort.isEmpty else { return false }
 
-        guard selectedEffort != selectedReasoningEffort else {
+        let normalizedEffort = selectedEffort.lowercased()
+        let clearsSessionOverride = normalizedEffort == ReasoningEffortOption.inheritID
+        if clearsSessionOverride && sessionScopedReasoning != true {
+            composerConfigurationErrorMessage = String(localized: "Session reasoning inheritance is unavailable on this server.")
+            return false
+        }
+
+        guard selectedEffort != selectedReasoningSelection else {
             return false
         }
 
@@ -1360,9 +1404,33 @@ final class ChatViewModel {
         lastError = nil
         defer { isUpdatingComposerConfiguration = false }
 
+        reasoningSelectionToken &+= 1
+        let selectionToken = reasoningSelectionToken
+        let expectedSessionID = canonicalSessionID
+        let expectedModel = currentModel
+        let expectedProvider = currentModelProvider
+        if sessionScopedReasoning == true && expectedSessionID == nil {
+            composerConfigurationErrorMessage = String(localized: "The server did not provide a session ID.")
+            return false
+        }
+
         do {
-            let response = try await client.saveReasoningEffort(selectedEffort)
-            selectedReasoningEffort = response.effectiveEffort ?? selectedEffort
+            let wireEffort = clearsSessionOverride ? "" : selectedEffort
+            let response = try await client.saveReasoningEffort(
+                wireEffort,
+                sessionID: sessionScopedReasoning == true ? expectedSessionID : nil
+            )
+            guard selectionToken == reasoningSelectionToken,
+                  expectedSessionID == canonicalSessionID,
+                  expectedModel == currentModel,
+                  expectedProvider == currentModelProvider
+            else { return false }
+
+            sessionScopedReasoning = response.sessionScopedReasoning ?? sessionScopedReasoning
+            sessionReasoningEffort = response.normalizedSessionReasoningEffort
+                ?? (sessionScopedReasoning == true && !clearsSessionOverride ? wireEffort : nil)
+            selectedReasoningEffort = response.effectiveEffort
+                ?? (clearsSessionOverride ? selectedReasoningEffort : selectedEffort)
             return true
         } catch {
             lastError = error
@@ -2931,7 +2999,11 @@ final class ChatViewModel {
     private func switchReasoningFromSlashCommand(_ args: String) async -> SlashCommandExecutionResult {
         let reasoning = args.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !reasoning.isEmpty else {
-            return .unsupported(friendlyMessage: String(localized: "Usage: /reasoning show|hide|none|minimal|low|medium|high|xhigh|max"))
+            let levels = SlashCommandCatalog.availableReasoningLevels(
+                forSupportedEfforts: supportedReasoningEfforts
+            )
+            let usage = (["show", "hide"] + levels).joined(separator: "|")
+            return .unsupported(friendlyMessage: String(localized: "Usage: /reasoning \(usage)|inherit"))
         }
 
         guard canRunConfigurationSlashCommand(String(localized: "change reasoning")) else {
@@ -2944,11 +3016,63 @@ final class ChatViewModel {
         lastError = nil
         defer { isUpdatingComposerConfiguration = false }
 
+        reasoningSelectionToken &+= 1
+        let selectionToken = reasoningSelectionToken
+        let expectedSessionID = canonicalSessionID
+        let expectedModel = currentModel
+        let expectedProvider = currentModelProvider
+
         do {
             if Self.reasoningDisplayArgs.contains(reasoning) {
                 _ = try await client.saveReasoningDisplay(reasoning)
-            } else if Self.reasoningEffortArgs.contains(reasoning) {
-                let response = try await client.saveReasoningEffort(reasoning)
+            } else if Self.reasoningClearArgs.contains(reasoning) {
+                guard sessionScopedReasoning == true else {
+                    return .unsupported(friendlyMessage: String(localized: "Session reasoning inheritance is unavailable on this server."))
+                }
+                guard let expectedSessionID else {
+                    return .unsupported(friendlyMessage: String(localized: "The server did not provide a session ID."))
+                }
+                let response = try await client.saveReasoningEffort(
+                    "",
+                    sessionID: expectedSessionID
+                )
+                guard selectionToken == reasoningSelectionToken,
+                      expectedSessionID == canonicalSessionID,
+                      expectedModel == currentModel,
+                      expectedProvider == currentModelProvider
+                else {
+                    return .unsupported(
+                        friendlyMessage: composerConfigurationErrorMessage
+                            ?? String(localized: "Reasoning changes are unavailable.")
+                    )
+                }
+
+                sessionScopedReasoning = response.sessionScopedReasoning ?? sessionScopedReasoning
+                sessionReasoningEffort = nil
+                selectedReasoningEffort = response.effectiveEffort ?? selectedReasoningEffort
+            } else if Self.reasoningEffortArgs.contains(reasoning)
+                || supportedReasoningEfforts?.contains(reasoning) == true {
+                if sessionScopedReasoning == true && expectedSessionID == nil {
+                    return .unsupported(friendlyMessage: String(localized: "The server did not provide a session ID."))
+                }
+                let response = try await client.saveReasoningEffort(
+                    reasoning,
+                    sessionID: sessionScopedReasoning == true ? expectedSessionID : nil
+                )
+                guard selectionToken == reasoningSelectionToken,
+                      expectedSessionID == canonicalSessionID,
+                      expectedModel == currentModel,
+                      expectedProvider == currentModelProvider
+                else {
+                    return .unsupported(
+                        friendlyMessage: composerConfigurationErrorMessage
+                            ?? String(localized: "Reasoning changes are unavailable.")
+                    )
+                }
+
+                sessionScopedReasoning = response.sessionScopedReasoning ?? sessionScopedReasoning
+                sessionReasoningEffort = response.normalizedSessionReasoningEffort
+                    ?? (sessionScopedReasoning == true ? reasoning : nil)
                 selectedReasoningEffort = response.effectiveEffort ?? reasoning
             } else {
                 return .unsupported(friendlyMessage: String(localized: "Unknown reasoning level: \(reasoning)."))
@@ -5129,7 +5253,8 @@ final class ChatViewModel {
     }
 
     private static let reasoningDisplayArgs: Set<String> = ["show", "hide", "on", "off"]
-    private static let reasoningEffortArgs: Set<String> = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+    private static let reasoningEffortArgs: Set<String> = ["none", "minimal", "low", "medium", "high", "xhigh"]
+    private static let reasoningClearArgs: Set<String> = [ReasoningEffortOption.inheritID, "clear", "default"]
     private static let personalityClearArgs: Set<String> = ["none", "default", "clear"]
 
     private static func btwMessageText(question: String, answer: String?, isLoading: Bool) -> String {

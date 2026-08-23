@@ -157,6 +157,7 @@ struct SessionSummary: Decodable, Equatable, Hashable, Identifiable {
     let workspace: String?
     let model: String?
     let modelProvider: String?
+    let reasoningEffort: String?
     let messageCount: Int?
     let createdAt: Double?
     let updatedAt: Double?
@@ -191,6 +192,7 @@ struct SessionSummary: Decodable, Equatable, Hashable, Identifiable {
         workspace: String? = nil,
         model: String? = nil,
         modelProvider: String? = nil,
+        reasoningEffort: String? = nil,
         messageCount: Int? = nil,
         createdAt: Double? = nil,
         updatedAt: Double? = nil,
@@ -224,6 +226,7 @@ struct SessionSummary: Decodable, Equatable, Hashable, Identifiable {
         self.workspace = workspace
         self.model = model
         self.modelProvider = modelProvider
+        self.reasoningEffort = reasoningEffort
         self.messageCount = messageCount
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -259,6 +262,7 @@ struct SessionSummary: Decodable, Equatable, Hashable, Identifiable {
         workspace = detail.workspace
         model = detail.model
         modelProvider = detail.modelProvider
+        reasoningEffort = detail.reasoningEffort
         messageCount = detail.messageCount ?? detail.messages?.count
         createdAt = detail.createdAt
         updatedAt = detail.updatedAt
@@ -301,6 +305,7 @@ struct SessionSummary: Decodable, Equatable, Hashable, Identifiable {
             workspace: workspace,
             model: model,
             modelProvider: modelProvider,
+            reasoningEffort: reasoningEffort,
             messageCount: messageCount,
             createdAt: createdAt,
             updatedAt: updatedAt,
@@ -484,6 +489,7 @@ struct SessionDetail: Decodable, Equatable, Identifiable {
     let workspace: String?
     let model: String?
     let modelProvider: String?
+    let reasoningEffort: String?
     let messageCount: Int?
     let createdAt: Double?
     let updatedAt: Double?
@@ -526,6 +532,7 @@ struct SessionDetail: Decodable, Equatable, Identifiable {
         case workspace
         case model
         case modelProvider
+        case reasoningEffort
         case messageCount
         case createdAt
         case updatedAt
@@ -577,6 +584,7 @@ struct SessionDetail: Decodable, Equatable, Identifiable {
         workspace = container.decodeLossyStringIfPresent(forKey: .workspace)
         model = container.decodeLossyStringIfPresent(forKey: .model)
         modelProvider = container.decodeLossyStringIfPresent(forKey: .modelProvider)
+        reasoningEffort = container.decodeLossyStringIfPresent(forKey: .reasoningEffort)
         messageCount = container.decodeLossyIntIfPresent(forKey: .messageCount)
         createdAt = container.decodeLossyDoubleIfPresent(forKey: .createdAt)
         updatedAt = container.decodeLossyDoubleIfPresent(forKey: .updatedAt)

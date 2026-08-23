@@ -244,6 +244,7 @@ struct ComposerReasoningMenu: View {
     /// Server-provided effort vocabulary for the current model; `nil` falls
     /// back to the full static list (older servers, issue #18).
     let supportedEfforts: [String]?
+    let includeInherit: Bool
     let reasoningTitle: String
     let isDisabled: Bool
     let width: CGFloat
@@ -275,7 +276,10 @@ struct ComposerReasoningMenu: View {
         UIMenu(
             title: String(localized: "Reasoning"),
             options: [.displayInline],
-            children: ReasoningEffortOption.options(forSupportedEfforts: supportedEfforts).map { option in
+            children: ReasoningEffortOption.options(
+                forSupportedEfforts: supportedEfforts,
+                includeInherit: includeInherit
+            ).map { option in
                 UIAction(
                     title: option.title,
                     state: selectedReasoningEffort == option.id ? .on : .off
@@ -436,6 +440,8 @@ struct ReasoningEffortOption: Identifiable, CaseIterable {
     let id: String
     let title: String
 
+    static let inheritID = "inherit"
+
     static let allCases: [ReasoningEffortOption] = [
         ReasoningEffortOption(id: "none", title: String(localized: "None")),
         ReasoningEffortOption(id: "minimal", title: String(localized: "Minimal")),
@@ -446,27 +452,42 @@ struct ReasoningEffortOption: Identifiable, CaseIterable {
         ReasoningEffortOption(id: "max", title: String(localized: "Max"))
     ]
 
+    /// Legacy servers do not advertise their effort vocabulary and therefore
+    /// cannot be assumed to support provider-specific levels such as Max.
+    static let legacyCases = allCases.filter { $0.id != "max" }
+
     static func title(for effort: String) -> String {
-        allCases.first(where: { $0.id == effort })?.title
+        if effort == inheritID {
+            return String(localized: "Default")
+        }
+        return allCases.first(where: { $0.id == effort })?.title
             ?? effort.capitalized
     }
 
     /// Menu options for a server-provided effort vocabulary (issue #18).
-    /// `nil` or empty → the full static list (older servers / defensive fallback;
-    /// an empty list also means `supports_reasoning_effort == false`, which hides
-    /// the control before this is ever rendered). Unknown ids are kept with a
-    /// capitalized title so a newer server's vocabulary still works.
-    static func options(forSupportedEfforts supportedEfforts: [String]?) -> [ReasoningEffortOption] {
-        guard let supportedEfforts, !supportedEfforts.isEmpty else { return allCases }
+    /// `nil` or empty → the legacy six-level list. Max is included only when the
+    /// server explicitly advertises it in `supported_efforts`. Unknown ids are
+    /// kept with a capitalized title so a newer server's vocabulary still works.
+    static func options(
+        forSupportedEfforts supportedEfforts: [String]?,
+        includeInherit: Bool = false
+    ) -> [ReasoningEffortOption] {
+        let effortOptions: [ReasoningEffortOption]
+        if let supportedEfforts, !supportedEfforts.isEmpty {
+            var seen = Set<String>()
+            effortOptions = supportedEfforts
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .filter { !$0.isEmpty && $0 != inheritID && seen.insert($0).inserted }
+                .map { id in
+                    allCases.first(where: { $0.id == id })
+                        ?? ReasoningEffortOption(id: id, title: id.capitalized)
+                }
+        } else {
+            effortOptions = legacyCases
+        }
 
-        var seen = Set<String>()
-        return supportedEfforts
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-            .filter { !$0.isEmpty && seen.insert($0).inserted }
-            .map { id in
-                allCases.first(where: { $0.id == id })
-                    ?? ReasoningEffortOption(id: id, title: id.capitalized)
-            }
+        guard includeInherit else { return effortOptions }
+        return [ReasoningEffortOption(id: inheritID, title: String(localized: "Default"))] + effortOptions
     }
 
     /// Whether the composer should show the effort control at all (issue #18).

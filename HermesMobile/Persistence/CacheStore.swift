@@ -286,6 +286,7 @@ private extension SessionSummary {
         workspace = cachedSession.workspace
         model = cachedSession.model
         modelProvider = cachedSession.modelProvider
+        reasoningEffort = nil
         messageCount = cachedSession.messageCount
         createdAt = cachedSession.createdAt
         updatedAt = cachedSession.updatedAt

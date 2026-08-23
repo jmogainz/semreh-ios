@@ -6011,6 +6011,263 @@ final class ChatViewModelSendTests: XCTestCase {
     }
 
     @MainActor
+    func testSessionScopedReasoningSelectionStaysIsolatedPerConversation() async throws {
+        var reasoningGETSessionEfforts: [String?] = []
+        var reasoningPOSTs: [(sessionID: String?, effort: String?)] = []
+        let handler: (URLRequest) throws -> (HTTPURLResponse, Data) = { request in
+            switch request.url?.path {
+            case "/api/profiles":
+                return apiTestJSONResponse(#"{"active":"default","profiles":[]}"#, for: request)
+            case "/api/models":
+                return apiTestJSONResponse("""
+                {
+                  "default_model": "gpt-5.4",
+                  "groups": [{
+                    "name": "OpenAI",
+                    "provider_id": "openai",
+                    "models": [{"id": "gpt-5.4", "name": "GPT 5.4"}]
+                  }]
+                }
+                """, for: request)
+            case "/api/session/update":
+                let body = try apiTestJSONBody(from: request)
+                let sessionID = body["session_id"] as? String
+                let effort = body["reasoning_effort"] as? String
+                reasoningPOSTs.append((sessionID: sessionID, effort: effort))
+                return apiTestJSONResponse("""
+                {
+                  "session": {
+                    "session_id": "\(sessionID ?? "")",
+                    "model": "gpt-5.4",
+                    "model_provider": "openai",
+                    "reasoning_effort": "\(effort ?? "")"
+                  }
+                }
+                """, for: request)
+            case "/api/reasoning":
+                let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+                let query = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value) })
+                XCTAssertNil(query["session_id"] ?? nil)
+                let effort = query["session_effort"] ?? nil
+                reasoningGETSessionEfforts.append(effort)
+                return apiTestJSONResponse("""
+                {
+                  "reasoning_effort": "\(effort ?? "low")",
+                  "supported_efforts": ["low", "high"],
+                  "supports_reasoning_effort": true,
+                  "session_scoped_reasoning": true
+                }
+                """, for: request)
+            case "/api/workspaces":
+                return apiTestJSONResponse(#"{"workspaces":[]}"#, for: request)
+            case "/api/commands":
+                return apiTestJSONResponse(#"{"commands":[]}"#, for: request)
+            default:
+                XCTFail("Unexpected request path: \(request.url?.path ?? "nil")")
+                throw URLError(.badURL)
+            }
+        }
+
+        let alpha = try makeViewModel(
+            sessionSummary: SessionSummary(
+                sessionId: "session-alpha",
+                title: "Alpha",
+                workspace: "/tmp/workspace",
+                model: "gpt-5.4",
+                modelProvider: "openai",
+                reasoningEffort: "low"
+            ),
+            handler: handler
+        )
+        let beta = try makeViewModel(
+            sessionSummary: SessionSummary(
+                sessionId: "session-beta",
+                title: "Beta",
+                workspace: "/tmp/workspace",
+                model: "gpt-5.4",
+                modelProvider: "openai",
+                reasoningEffort: "high"
+            ),
+            handler: handler
+        )
+
+        await alpha.loadComposerConfiguration()
+        await beta.loadComposerConfiguration()
+
+        XCTAssertEqual(alpha.selectedReasoningEffort, "low")
+        XCTAssertEqual(beta.selectedReasoningEffort, "high")
+        XCTAssertEqual(reasoningGETSessionEfforts, ["low", "high"])
+
+        let alphaDidSelect = await alpha.selectReasoningEffort("high")
+        let betaDidSelect = await beta.selectReasoningEffort("low")
+        XCTAssertTrue(alphaDidSelect)
+        XCTAssertTrue(betaDidSelect)
+        XCTAssertEqual(reasoningPOSTs.map { $0.sessionID }, ["session-alpha", "session-beta"])
+        XCTAssertEqual(reasoningPOSTs.map { $0.effort }, ["high", "low"])
+        XCTAssertEqual(reasoningGETSessionEfforts, ["low", "high", "high", "low"])
+    }
+
+    @MainActor
+    func testLegacyReasoningSelectionRetainsGlobalNoSessionPost() async throws {
+        var postedBody: [String: Any]?
+        let viewModel = try makeViewModel(
+            sessionSummary: SessionSummary(
+                sessionId: "session-legacy",
+                title: "Legacy",
+                workspace: "/tmp/workspace",
+                model: "gpt-5.4",
+                modelProvider: "openai"
+            )
+        ) { request in
+            switch request.url?.path {
+            case "/api/profiles":
+                return apiTestJSONResponse(#"{"active":"default","profiles":[]}"#, for: request)
+            case "/api/models":
+                return apiTestJSONResponse(#"{"default_model":"gpt-5.4","groups":[]}"#, for: request)
+            case "/api/reasoning" where request.httpMethod == "POST":
+                postedBody = try apiTestJSONBody(from: request)
+                return apiTestJSONResponse(#"{"ok":true,"reasoning_effort":"high"}"#, for: request)
+            case "/api/reasoning":
+                return apiTestJSONResponse(#"{"reasoning_effort":"low","supported_efforts":["low","high"],"supports_reasoning_effort":true}"#, for: request)
+            case "/api/workspaces":
+                return apiTestJSONResponse(#"{"workspaces":[]}"#, for: request)
+            case "/api/commands":
+                return apiTestJSONResponse(#"{"commands":[]}"#, for: request)
+            default:
+                XCTFail("Unexpected request path: \(request.url?.path ?? "nil")")
+                throw URLError(.badURL)
+            }
+        }
+
+        await viewModel.loadComposerConfiguration()
+        XCTAssertNil(viewModel.sessionScopedReasoning)
+        let didSelect = await viewModel.selectReasoningEffort("high")
+        XCTAssertTrue(didSelect)
+        XCTAssertEqual(postedBody?["effort"] as? String, "high")
+        XCTAssertNil(postedBody?["session_id"])
+    }
+
+    @MainActor
+    func testReasoningSlashCommandUsesAdvertisedSessionScope() async throws {
+        var sessionUpdateBody: [String: Any]?
+        var reasoningQuery: [String: String?]?
+        let viewModel = try makeViewModel(
+            sessionSummary: SessionSummary(
+                sessionId: "session-slash",
+                title: "Slash",
+                workspace: "/tmp/workspace",
+                model: "gpt-5.4",
+                modelProvider: "openai"
+            )
+        ) { request in
+            switch request.url?.path {
+            case "/api/profiles":
+                return apiTestJSONResponse(#"{"active":"default","profiles":[]}"#, for: request)
+            case "/api/models":
+                return apiTestJSONResponse(#"{"default_model":"gpt-5.4","groups":[]}"#, for: request)
+            case "/api/session/update":
+                sessionUpdateBody = try apiTestJSONBody(from: request)
+                return apiTestJSONResponse("""
+                {
+                  "session": {
+                    "session_id": "session-slash",
+                    "model": "gpt-5.4",
+                    "model_provider": "openai",
+                    "reasoning_effort": "max"
+                  }
+                }
+                """, for: request)
+            case "/api/reasoning":
+                let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+                reasoningQuery = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value) })
+                return apiTestJSONResponse(#"{"ok":true,"reasoning_effort":"max","supported_efforts":["low","max"],"supports_reasoning_effort":true,"session_scoped_reasoning":true}"#, for: request)
+            case "/api/workspaces":
+                return apiTestJSONResponse(#"{"workspaces":[]}"#, for: request)
+            case "/api/commands":
+                return apiTestJSONResponse(#"{"commands":[]}"#, for: request)
+            default:
+                XCTFail("Unexpected request path: \(request.url?.path ?? "nil")")
+                throw URLError(.badURL)
+            }
+        }
+
+        await viewModel.loadComposerConfiguration()
+        let result = await viewModel.executeSlashCommand(
+            try XCTUnwrap(SlashCommandCatalog.command(named: "reasoning")),
+            args: "max"
+        )
+
+        XCTAssertEqual(result, .executed(message: nil))
+        XCTAssertEqual(sessionUpdateBody?["session_id"] as? String, "session-slash")
+        XCTAssertEqual(sessionUpdateBody?["reasoning_effort"] as? String, "max")
+        XCTAssertNil(sessionUpdateBody?["effort"])
+        XCTAssertEqual(reasoningQuery?["session_effort"] ?? nil, "max")
+        XCTAssertNil(reasoningQuery?["session_id"] ?? nil)
+        XCTAssertEqual(viewModel.selectedReasoningEffort, "max")
+    }
+
+    @MainActor
+    func testSessionScopedInheritSelectionClearsOverrideAndRestoresEffectiveEffort() async throws {
+        var sessionUpdateBody: [String: Any]?
+        var reasoningQuery: [String: String?]?
+        let viewModel = try makeViewModel(
+            sessionSummary: SessionSummary(
+                sessionId: "session-inherit",
+                title: "Inherit",
+                workspace: "/tmp/workspace",
+                model: "gpt-5.6-luna",
+                modelProvider: "openai-codex",
+                reasoningEffort: "high"
+            )
+        ) { request in
+            switch request.url?.path {
+            case "/api/profiles":
+                return apiTestJSONResponse(#"{"active":"default","profiles":[]}"#, for: request)
+            case "/api/models":
+                return apiTestJSONResponse("""
+                {
+                  "default_model":"gpt-5.6-luna",
+                  "groups":[{"name":"OpenAI Codex","provider_id":"openai-codex","models":[{"id":"gpt-5.6-luna","name":"GPT-5.6 Luna"}]}]
+                }
+                """, for: request)
+            case "/api/session/update":
+                sessionUpdateBody = try apiTestJSONBody(from: request)
+                return apiTestJSONResponse("""
+                {"session":{"session_id":"session-inherit","model":"gpt-5.6-luna","model_provider":"openai-codex","reasoning_effort":""}}
+                """, for: request)
+            case "/api/reasoning":
+                let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+                reasoningQuery = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value) })
+                let isCleared = (reasoningQuery?["session_effort"] ?? nil) == ""
+                return apiTestJSONResponse("""
+                {"reasoning_effort":"\(isCleared ? "low" : "high")","supported_efforts":["low","high","max"],"supports_reasoning_effort":true,"session_scoped_reasoning":true}
+                """, for: request)
+            case "/api/workspaces":
+                return apiTestJSONResponse(#"{"workspaces":[]}"#, for: request)
+            case "/api/commands":
+                return apiTestJSONResponse(#"{"commands":[]}"#, for: request)
+            default:
+                XCTFail("Unexpected request path: \(request.url?.path ?? "nil")")
+                throw URLError(.badURL)
+            }
+        }
+
+        await viewModel.loadComposerConfiguration()
+        XCTAssertEqual(viewModel.sessionReasoningEffort, "high")
+
+        let didClear = await viewModel.selectReasoningEffort(ReasoningEffortOption.inheritID)
+
+        XCTAssertTrue(didClear)
+        XCTAssertEqual(sessionUpdateBody?["session_id"] as? String, "session-inherit")
+        XCTAssertEqual(sessionUpdateBody?["reasoning_effort"] as? String, "")
+        XCTAssertNil(sessionUpdateBody?["effort"])
+        XCTAssertEqual(reasoningQuery?["session_effort"] ?? nil, "")
+        XCTAssertNil(reasoningQuery?["session_id"] ?? nil)
+        XCTAssertEqual(viewModel.selectedReasoningEffort, "low")
+        XCTAssertNil(viewModel.sessionReasoningEffort)
+    }
+
+    @MainActor
     func testSelectingComposerModelHidesEffortControlWhenUnsupported() async throws {
         let viewModel = try makeViewModel(
             sessionSummary: makeSession(model: "gpt-5.4", modelProvider: "openai", profile: "work")

@@ -138,7 +138,8 @@ extension APIClient {
         id: String,
         workspace: String?,
         model: String?,
-        modelProvider: String?
+        modelProvider: String?,
+        reasoningEffort: String? = nil
     ) async throws -> SessionResponse {
         try await send(
             endpoint: .updateSession,
@@ -147,7 +148,8 @@ extension APIClient {
                 sessionId: id,
                 workspace: workspace,
                 model: model,
-                modelProvider: modelProvider
+                modelProvider: modelProvider,
+                reasoningEffort: reasoningEffort
             )
         )
     }
@@ -220,6 +222,7 @@ private struct UpdateSessionRequest: Encodable {
     let workspace: String?
     let model: String?
     let modelProvider: String?
+    let reasoningEffort: String?
 }
 
 private struct MoveSessionRequest: Encodable {

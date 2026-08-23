@@ -14,6 +14,7 @@ struct SlashCommandAutocompleteView: View {
     let skillSuggestions: [SkillSlashSuggestion]
     let agentCommands: [AgentCommand]
     let selectedReasoningEffort: String?
+    let supportedReasoningEfforts: [String]?
     let onSelectCommand: (SlashCommand) -> Void
     let onSelectSkillCommand: (SkillSlashSuggestion) -> Void
     let onSelectAgentCommand: (AgentSlashCommandSuggestion) -> Void
@@ -339,7 +340,9 @@ struct SlashCommandAutocompleteView: View {
             var seen = Set<String>()
             return (roots + suggestions).filter { seen.insert($0).inserted }
         case .reasoningLevels:
-            return SlashCommandCatalog.reasoningLevels
+            return SlashCommandCatalog.availableReasoningLevels(
+                forSupportedEfforts: supportedReasoningEfforts
+            ) + [ReasoningEffortOption.inheritID]
         case .personalities:
             return personalitySuggestions
         case .skills:
