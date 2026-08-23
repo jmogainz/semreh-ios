@@ -5,17 +5,17 @@ struct MessageBubbleView: View {
     @Environment(\.appColorPalette) private var palette
 
     private var userBubbleBackground: Color {
-        GokuVisualTheme.action(for: colorScheme, palette: palette)
+        SemrehVisualTheme.action(for: colorScheme, palette: palette)
     }
 
     private var userBubbleForeground: Color {
-        GokuVisualTheme.accentForeground(for: colorScheme, palette: palette)
+        SemrehVisualTheme.accentForeground(for: colorScheme, palette: palette)
     }
 
     private var userBubbleBorder: Color {
         colorScheme == .dark
-            ? GokuVisualTheme.action(for: .dark, palette: palette).opacity(0.34)
-            : GokuVisualTheme.canvas(for: .dark, palette: palette).opacity(0.10)
+            ? SemrehVisualTheme.action(for: .dark, palette: palette).opacity(0.34)
+            : SemrehVisualTheme.canvas(for: .dark, palette: palette).opacity(0.10)
     }
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage(ChatTranscriptDisplaySettings.hidesAttachmentPathsKey) private var hidesAttachmentPaths = true

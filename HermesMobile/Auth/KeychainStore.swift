@@ -33,7 +33,7 @@ struct KeychainStore: KeychainStoring {
         let service = service
             ?? Bundle.main.object(forInfoDictionaryKey: "HermesKeychainService") as? String
             ?? Bundle.main.bundleIdentifier
-            ?? "com.jacobmoore.goku"
+            ?? "com.jacobmoore.semreh"
         self.keychain = Keychain(service: service)
             .accessibility(.afterFirstUnlockThisDeviceOnly)
     }

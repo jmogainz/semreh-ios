@@ -179,7 +179,7 @@ private struct ListenPlaybackBar: View {
                         .fill(Color.accentColor)
                     Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(GokuVisualTheme.accentForeground(for: colorScheme, palette: palette))
+                        .foregroundStyle(SemrehVisualTheme.accentForeground(for: colorScheme, palette: palette))
                 }
                 .frame(width: 34, height: 34)
             }
@@ -589,7 +589,7 @@ struct ChatView: View {
                 .zIndex(10)
             }
         }
-        .background { GokuBackdrop().ignoresSafeArea() }
+        .background { SemrehBackdrop().ignoresSafeArea() }
         .overlay(alignment: .top) {
             GitActionToastOverlay(state: gitToastState)
         }
@@ -2017,7 +2017,7 @@ struct ChatView: View {
     private func beginResponseCompletionBackgroundTask() {
         guard responseCompletionBackgroundTask == .invalid else { return }
 
-        let taskIdentifier = UIApplication.shared.beginBackgroundTask(withName: "Goku response completion") {
+        let taskIdentifier = UIApplication.shared.beginBackgroundTask(withName: "Semreh response completion") {
             Task { @MainActor in
                 endResponseCompletionBackgroundTask()
                 viewModel.suspendStreamForBackground()

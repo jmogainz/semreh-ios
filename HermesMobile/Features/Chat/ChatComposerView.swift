@@ -371,14 +371,14 @@ struct MessageComposerView: View {
                 .adaptiveGlass(
                     .regular,
                     isInteractive: true,
-                    tint: GokuVisualTheme.action(for: colorScheme, palette: palette)
+                    tint: SemrehVisualTheme.action(for: colorScheme, palette: palette)
                         .opacity(colorScheme == .dark ? 0.22 : 0.10),
                     fallbackMaterial: .ultraThinMaterial,
                     in: RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
                 )
                 .overlay {
                     RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
-                        .stroke(GokuVisualTheme.subtleStroke(for: colorScheme, palette: palette), lineWidth: 0.8)
+                        .stroke(SemrehVisualTheme.subtleStroke(for: colorScheme, palette: palette), lineWidth: 0.8)
                         .allowsHitTesting(false)
                 }
                 .clipShape(RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous))
@@ -985,7 +985,7 @@ struct MessageComposerView: View {
             return colorScheme == .dark ? Color.white.opacity(0.18) : Color.black.opacity(0.12)
         }
 
-        return GokuVisualTheme.energy(for: palette)
+        return SemrehVisualTheme.energy(for: palette)
     }
 
     private var actionButtonForeground: Color {
@@ -1000,7 +1000,7 @@ struct MessageComposerView: View {
             return Color(.secondaryLabel)
         }
 
-        return GokuVisualTheme.energyForeground(for: palette)
+        return SemrehVisualTheme.energyForeground(for: palette)
     }
 
     private var isComposerExpanded: Bool {

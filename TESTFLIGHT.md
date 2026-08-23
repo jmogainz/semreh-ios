@@ -2,7 +2,7 @@
 
 > **Maintainer-only ops.** Everything in this file requires the maintainer's Apple Developer account, App Store Connect access, and signing credentials. Contributors never need this runbook to build, test, or contribute to the app.
 
-This is the step-by-step checklist for getting Goku ready for external TestFlight testers. Work through it in order. Each numbered item is intended to be a fresh, focused Codex session or an owner-only App Store Connect task.
+This is the step-by-step checklist for getting Semreh ready for external TestFlight testers. Work through it in order. Each numbered item is intended to be a fresh, focused Codex session or an owner-only App Store Connect task.
 
 Goal: invite external testers only after a clean release-candidate build has been uploaded, owner-verified internally on device, submitted to Beta App Review, and approved.
 
@@ -152,11 +152,11 @@ Purpose: prevent archive/upload failures caused by missing identifiers or entitl
 Owner task in Apple Developer / App Store Connect:
 
 1. Confirm app bundle ID exists:
-   - `com.jacobmoore.goku`
+   - `com.jacobmoore.semreh`
 2. Confirm share extension bundle ID exists:
-   - `com.jacobmoore.goku.shareextension`
+   - `com.jacobmoore.semreh.shareextension`
 3. Confirm App Group exists:
-   - `group.com.jacobmoore.goku`
+   - `group.com.jacobmoore.semreh`
 4. Confirm the App Group is enabled for both the app and share-extension bundle IDs.
 5. Confirm automatic signing can create/update App Store provisioning profiles for both targets.
 6. Confirm Apple Developer Program agreements are accepted.
@@ -177,9 +177,9 @@ Exit criteria:
 Current local result as of 2026-05-15:
 
 - Local validation passed on `codex/testflight-doc-reconcile`.
-- App target Release settings use automatic signing, Team ID `U8G25F98S2`, bundle ID `com.jacobmoore.goku`, and `HermesMobile/Resources/HermesMobile.entitlements`.
-- Share extension Release settings use automatic signing, Team ID `U8G25F98S2`, bundle ID `com.jacobmoore.goku.shareextension`, and `HermesShareExtension/Resources/HermesShareExtension.entitlements`.
-- Both entitlement files include `group.com.jacobmoore.goku`.
+- App target Release settings use automatic signing, Team ID `U8G25F98S2`, bundle ID `com.jacobmoore.semreh`, and `HermesMobile/Resources/HermesMobile.entitlements`.
+- Share extension Release settings use automatic signing, Team ID `U8G25F98S2`, bundle ID `com.jacobmoore.semreh.shareextension`, and `HermesShareExtension/Resources/HermesShareExtension.entitlements`.
+- Both entitlement files include `group.com.jacobmoore.semreh`.
 - Owner confirmed the Apple Developer Portal and App Store Connect API key items on 2026-05-15.
 
 Current Step 4 status:
@@ -232,13 +232,13 @@ Draft App Store Connect metadata:
 Beta App Description:
 
 ```text
-Goku is a native iOS client for a self-hosted Hermes Web UI developer-agent server. Use it to sign in to your configured server, browse sessions, send messages with composer options and attachments, stream responses, view workspace files, and open read-only Tasks, Skills, Memory, and Usage Analytics panels.
+Semreh is a native iOS client for a self-hosted Hermes Web UI developer-agent server. Use it to sign in to your configured server, browse sessions, send messages with composer options and attachments, stream responses, view workspace files, and open read-only Tasks, Skills, Memory, and Usage Analytics panels.
 ```
 
 What to Test:
 
 ```text
-Test core Goku workflows: sign in to a self-hosted Hermes Web UI server, browse sessions, open existing conversations, send messages with model/reasoning/workspace options, stream responses, attach photos/files, use share extension import, browse workspace files, and view read-only Tasks, Skills, Memory, and Usage Analytics.
+Test core Semreh workflows: sign in to a self-hosted Hermes Web UI server, browse sessions, open existing conversations, send messages with model/reasoning/workspace options, stream responses, attach photos/files, use share extension import, browse workspace files, and view read-only Tasks, Skills, Memory, and Usage Analytics.
 ```
 
 Beta App Review Information:
@@ -623,7 +623,7 @@ Owner task in App Store Connect:
 Suggested `What to Test`:
 
 ```text
-Test core Goku workflows: sign in to a self-hosted Hermes Web UI server, browse sessions, open existing conversations, send messages with model/reasoning/workspace options, stream responses, attach photos/files, use share extension import, browse workspace files, and view read-only Tasks, Skills, Memory, and Usage Analytics.
+Test core Semreh workflows: sign in to a self-hosted Hermes Web UI server, browse sessions, open existing conversations, send messages with model/reasoning/workspace options, stream responses, attach photos/files, use share extension import, browse workspace files, and view read-only Tasks, Skills, Memory, and Usage Analytics.
 ```
 
 Exit criteria:
@@ -695,7 +695,7 @@ xcodebuild -project HermesMobile.xcodeproj -scheme HermesMobile -configuration R
 Use this as a starting point and keep it accurate for the exact submitted build.
 
 ```text
-Goku is a native iOS client for a user-controlled Hermes Web UI developer-agent server.
+Semreh is a native iOS client for a user-controlled Hermes Web UI developer-agent server.
 
 Review server:
 https://<your-server>

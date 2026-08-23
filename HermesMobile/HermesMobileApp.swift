@@ -1,24 +1,24 @@
 import SwiftUI
 import SwiftData
 
-struct GokuSceneActions {
+struct SemrehSceneActions {
     let canCreateNewChat: Bool
     let createNewChat: () -> Void
     let searchSessions: () -> Void
 }
 
-private struct GokuSceneActionsKey: FocusedValueKey {
-    typealias Value = GokuSceneActions
+private struct SemrehSceneActionsKey: FocusedValueKey {
+    typealias Value = SemrehSceneActions
 }
 
 extension FocusedValues {
-    var hermexSceneActions: GokuSceneActions? {
-        get { self[GokuSceneActionsKey.self] }
-        set { self[GokuSceneActionsKey.self] = newValue }
+    var hermexSceneActions: SemrehSceneActions? {
+        get { self[SemrehSceneActionsKey.self] }
+        set { self[SemrehSceneActionsKey.self] = newValue }
     }
 }
 
-struct GokuCommands: Commands {
+struct SemrehCommands: Commands {
     @FocusedValue(\.hermexSceneActions) private var actions
 
     var body: some Commands {
@@ -49,31 +49,31 @@ struct HermesMobileApp: App {
         WindowGroup {
             #if DEBUG
             // Launch argument hooks for deterministic, server-free simulator diagnosis:
-            // `xcrun simctl launch <udid> com.jacobmoore.goku --streaming-lab`
-            // `xcrun simctl launch <udid> com.jacobmoore.goku --sidebar-brand-lab`
+            // `xcrun simctl launch <udid> com.jacobmoore.semreh --streaming-lab`
+            // `xcrun simctl launch <udid> com.jacobmoore.semreh --sidebar-brand-lab`
             if ProcessInfo.processInfo.arguments.contains("--sidebar-brand-lab") {
                 SidebarBrandLabView()
-                    .gokuAppTheme()
+                    .semrehAppTheme()
                     .preferredColorScheme(AppTheme.storedValue(appThemeRawValue).colorScheme)
             } else if ProcessInfo.processInfo.arguments.contains("--streaming-lab") {
                 NavigationStack {
                     StreamingLabView()
                 }
-                .gokuAppTheme()
+                .semrehAppTheme()
             } else {
                 ContentView(authManager: authManager)
-                    .gokuAppTheme()
+                    .semrehAppTheme()
                     .preferredColorScheme(AppTheme.storedValue(appThemeRawValue).colorScheme)
             }
             #else
             ContentView(authManager: authManager)
-                .gokuAppTheme()
+                .semrehAppTheme()
                 .preferredColorScheme(AppTheme.storedValue(appThemeRawValue).colorScheme)
             #endif
         }
         .modelContainer(for: [CachedSession.self, CachedMessage.self])
         .commands {
-            GokuCommands()
+            SemrehCommands()
             SidebarCommands()
         }
     }
@@ -83,7 +83,7 @@ struct HermesMobileApp: App {
 private struct SidebarBrandLabView: View {
     var body: some View {
         ZStack {
-            GokuBackdrop().ignoresSafeArea()
+            SemrehBackdrop().ignoresSafeArea()
 
             VStack(spacing: 0) {
                 HStack(spacing: 16) {
@@ -96,9 +96,9 @@ private struct SidebarBrandLabView: View {
 
                         Text("JM")
                             .font(.system(size: 16, weight: .semibold, design: .rounded))
-                            .foregroundStyle(GokuVisualTheme.energyForeground())
+                            .foregroundStyle(SemrehVisualTheme.energyForeground())
                             .frame(width: 44, height: 44)
-                            .background(GokuVisualTheme.energy(), in: Circle())
+                            .background(SemrehVisualTheme.energy(), in: Circle())
                     }
                     .padding(.vertical, 2)
                     .background(.regularMaterial, in: Capsule())
@@ -107,7 +107,7 @@ private struct SidebarBrandLabView: View {
                 .padding(.top, 28)
                 .overlay(alignment: .bottom) {
                     Capsule()
-                        .fill(GokuVisualTheme.energyGradient)
+                        .fill(SemrehVisualTheme.energyGradient)
                         .frame(height: 2)
                         .padding(.horizontal, 24)
                         .offset(y: 11)

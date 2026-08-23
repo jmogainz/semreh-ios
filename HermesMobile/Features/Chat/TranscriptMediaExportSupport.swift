@@ -122,7 +122,7 @@ private struct TranscriptMediaExportDescriptor {
 extension TranscriptMediaReference {
     var exportBaseName: String {
         let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? String(localized: "Goku Media") : trimmed
+        return trimmed.isEmpty ? String(localized: "Semreh Media") : trimmed
     }
 
     var exportFileExtension: String? {

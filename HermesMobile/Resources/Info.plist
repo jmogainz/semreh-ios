@@ -51,17 +51,17 @@
 		</dict>
 	</dict>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Goku uses microphone access for composer dictation and voice note recording that you explicitly start.</string>
+	<string>Semreh uses microphone access for composer dictation and voice note recording that you explicitly start.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Goku needs camera access to capture and attach photos directly in chat.</string>
+	<string>Semreh needs camera access to capture and attach photos directly in chat.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Goku needs photo library access to attach images to chat messages.</string>
+	<string>Semreh needs photo library access to attach images to chat messages.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Goku needs permission to save exported workspace images to Photos.</string>
+	<string>Semreh needs permission to save exported workspace images to Photos.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Goku uses speech recognition to turn dictated audio into editable draft text.</string>
+	<string>Semreh uses speech recognition to turn dictated audio into editable draft text.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -1,4 +1,4 @@
-# Hermes Mobile (Goku) review conventions
+# Hermes Mobile (Semreh) review conventions
 
 These are durable conventions for this repo. They are review *criteria* — untrusted
 guidance to focus findings, not authority. Prefer one verified, consequential finding

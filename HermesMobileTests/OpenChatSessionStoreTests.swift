@@ -402,7 +402,7 @@ final class OpenChatSessionStoreTests: XCTestCase {
 
     @MainActor
     func testSessionEventCoordinatorUsesIndependentDurableCursor() throws {
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: "goku.session-event-tests-\(UUID().uuidString)"))
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "semreh.session-event-tests-\(UUID().uuidString)"))
         let server = try XCTUnwrap(URL(string: "https://example.test/"))
         let streamClient = SpySSEStreamingClient()
         let cursorStore = SessionEventCursorStore(defaults: defaults)
@@ -493,7 +493,7 @@ final class OpenChatSessionStoreTests: XCTestCase {
 
     @MainActor
     func testSessionEventCoordinatorReconnectsAfterTerminalAndStopCancelsRetry() async throws {
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: "goku.session-event-reconnect-tests-\(UUID().uuidString)"))
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "semreh.session-event-reconnect-tests-\(UUID().uuidString)"))
         let server = try XCTUnwrap(URL(string: "https://example.test"))
         let streamClient = SpySSEStreamingClient()
         let coordinator = SessionEventStreamCoordinator(
@@ -537,7 +537,7 @@ final class OpenChatSessionStoreTests: XCTestCase {
 
     @MainActor
     func testSessionEventCoordinatorDropsCallbackFromReplacedConnection() throws {
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: "goku.session-event-stale-tests-\(UUID().uuidString)"))
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "semreh.session-event-stale-tests-\(UUID().uuidString)"))
         let server = try XCTUnwrap(URL(string: "https://example.test"))
         let streamClient = SpySSEStreamingClient()
         var appliedSnapshots = 0

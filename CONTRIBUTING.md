@@ -1,4 +1,4 @@
-# Contributing to Goku
+# Contributing to Semreh
 
 Thanks for your interest in contributing! This document covers local setup,
 running tests, code signing for contributors, and the PR workflow. Please also
@@ -70,7 +70,7 @@ independently useful, it deserves its own PR.
 
 ## App bug or server bug?
 
-Goku is a thin client over [hermes-webui](https://github.com/nesquena/hermes-webui),
+Semreh is a thin client over [hermes-webui](https://github.com/nesquena/hermes-webui),
 so a fair share of apparent app bugs are really server bugs. Before filing a
 bug here, reproduce it in the hermes-webui **web UI** against the same server:
 
@@ -111,6 +111,6 @@ operation — contributors never need App Store Connect access.
 
 ## Questions
 
-Ask in [GitHub Discussions](https://github.com/jmogainz/goku-ios/discussions)
+Ask in [GitHub Discussions](https://github.com/jmogainz/semreh-ios/discussions)
 if something here is unclear or wrong — docs fixes are welcome contributions
 too.

@@ -1,6 +1,6 @@
 # Contract Test Readiness
 
-Goku is tested against `hermes-webui` tag `v0.51.85`, peeled commit `f1d399b437c1ca7fe4b6d2093aebe334c32f34a3`.
+Semreh is tested against `hermes-webui` tag `v0.51.85`, peeled commit `f1d399b437c1ca7fe4b6d2093aebe334c32f34a3`.
 
 The machine-readable pin is `UPSTREAM_TESTED_SHA`. Any future contract test runner must clone or check out upstream at that exact SHA unless the pin is intentionally updated after manual verification.
 

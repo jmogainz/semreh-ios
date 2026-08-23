@@ -27,7 +27,7 @@ struct FileBrowserView: View {
             content
                 .adaptiveReadableScrollContent(maxWidth: AdaptiveReadableContentWidth.workspace)
         }
-            .background { GokuBackdrop().ignoresSafeArea() }
+            .background { SemrehBackdrop().ignoresSafeArea() }
             .navigationTitle("Files")
             .navigationBarTitleDisplayMode(.inline)
             .task {
@@ -187,8 +187,8 @@ struct FileBrowserView: View {
         .padding(.horizontal)
         .padding(.vertical, 10)
         .background(
-            GokuVisualTheme.panel(for: colorScheme, palette: palette)
-                .opacity(GokuVisualTheme.chromeSurfaceOpacity(reduceTransparency: reduceTransparency))
+            SemrehVisualTheme.panel(for: colorScheme, palette: palette)
+                .opacity(SemrehVisualTheme.chromeSurfaceOpacity(reduceTransparency: reduceTransparency))
         )
     }
 
@@ -219,15 +219,15 @@ struct FileBrowserView: View {
         .frame(height: 40)
         .background(
             reduceTransparency
-                ? GokuVisualTheme.raisedPanel(for: colorScheme, palette: palette)
+                ? SemrehVisualTheme.raisedPanel(for: colorScheme, palette: palette)
                 : Color(.tertiarySystemFill).opacity(0.5),
             in: RoundedRectangle(cornerRadius: 14, style: .continuous)
         )
         .padding(.horizontal)
         .padding(.bottom, 10)
         .background(
-            GokuVisualTheme.panel(for: colorScheme, palette: palette)
-                .opacity(GokuVisualTheme.chromeSurfaceOpacity(reduceTransparency: reduceTransparency))
+            SemrehVisualTheme.panel(for: colorScheme, palette: palette)
+                .opacity(SemrehVisualTheme.chromeSurfaceOpacity(reduceTransparency: reduceTransparency))
         )
         .overlay(alignment: .bottom) {
             Divider()

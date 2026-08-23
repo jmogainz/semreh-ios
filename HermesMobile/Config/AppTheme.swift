@@ -6,7 +6,7 @@ import UIKit
 #endif
 
 enum AppColorPalette: String, CaseIterable, Sendable {
-    case goku
+    case semreh
     case chatgpt
     case midnight
     case forest
@@ -29,7 +29,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .system:
-            String(localized: "Goku")
+            String(localized: "Semreh")
         case .light:
             String(localized: "Light")
         case .dark:
@@ -59,7 +59,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
     var palette: AppColorPalette {
         switch self {
         case .system, .light, .dark:
-            .goku
+            .semreh
         case .chatgpt:
             .chatgpt
         case .midnight:
@@ -262,7 +262,7 @@ enum ChatTranscriptDisplaySettings {
     /// Whether the user's primary preferred language reads right-to-left
     /// (Arabic/Hebrew/Persian/Urdu/…). Read from the device language *preference*
     /// — not the app's resolved UI direction — so it still fires for an RTL user
-    /// even though Goku isn't translated into their language yet: the app text
+    /// even though Semreh isn't translated into their language yet: the app text
     /// falls back to English (LTR), but the chat layout should not. Only the
     /// primary preference counts (a German-first user with Arabic further down
     /// the list is "using German"). `preferredLanguages` is injectable for tests.
@@ -521,7 +521,7 @@ enum ResponseCompletionNotificationPolicy {
 }
 
 struct ResponseCompletionNotificationRequest: Equatable {
-    static let title = String(localized: "Goku response complete")
+    static let title = String(localized: "Semreh response complete")
     static let body = String(localized: "The assistant finished responding.")
 
     let sessionID: String?

@@ -129,7 +129,7 @@ struct SettingsView: View {
                         }
                     }
 
-                    SettingsFootnote(String(localized: "Goku, Light, and Dark keep the Goku colors. Other themes restyle the whole app and still follow your Light/Dark system setting."))
+                    SettingsFootnote(String(localized: "Semreh, Light, and Dark keep the Semreh colors. Other themes restyle the whole app and still follow your Light/Dark system setting."))
 
                     SettingsDivider()
 
@@ -432,16 +432,16 @@ struct SettingsView: View {
                     if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
                         Link(destination: settingsURL) {
                             SettingsAccessoryRow(
-                                title: String(localized: "Open Goku Settings"),
+                                title: String(localized: "Open Semreh Settings"),
                                 systemImage: "gearshape",
                                 accessorySystemImage: "arrow.up.forward"
                             )
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Open Goku Settings")
+                        .accessibilityLabel("Open Semreh Settings")
                     }
 
-                    SettingsFootnote(String(localized: "Run Goku actions like New Chat from Siri, Spotlight, the Lock Screen, or the iPhone Action button. Open Goku Settings to manage its Siri & Search options. To assign an action to the Action button, open the iOS Settings app, choose Action Button, then Shortcut, and pick a Goku action."))
+                    SettingsFootnote(String(localized: "Run Semreh actions like New Chat from Siri, Spotlight, the Lock Screen, or the iPhone Action button. Open Semreh Settings to manage its Siri & Search options. To assign an action to the Action button, open the iOS Settings app, choose Action Button, then Shortcut, and pick a Semreh action."))
                 }
 
                 serversCard
@@ -579,7 +579,7 @@ struct SettingsView: View {
             .padding(.bottom, 36)
             .adaptiveReadableContent(maxWidth: AdaptiveReadableContentWidth.secondaryDestination)
         }
-        .background { GokuBackdrop().ignoresSafeArea() }
+        .background { SemrehBackdrop().ignoresSafeArea() }
         .navigationTitle("Settings")
         .task {
             await loadServerSettings()
@@ -1496,7 +1496,7 @@ private struct SettingsCard<Content: View>: View {
             Text(title)
                 .textCase(.uppercase)
                 .font(AppFont.caption(weight: .semibold))
-                .foregroundStyle(GokuVisualTheme.brandAccent(for: colorScheme, palette: palette))
+                .foregroundStyle(SemrehVisualTheme.brandAccent(for: colorScheme, palette: palette))
                 .padding(.horizontal, 4)
                 .padding(.bottom, 8)
 
@@ -1506,7 +1506,7 @@ private struct SettingsCard<Content: View>: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .gokuPanel(cornerRadius: 18)
+            .semrehPanel(cornerRadius: 18)
         }
     }
 }
@@ -2100,7 +2100,7 @@ private struct ServerDetailView: View {
             .padding(.top, 18)
             .padding(.bottom, 36)
         }
-        .background { GokuBackdrop().ignoresSafeArea() }
+        .background { SemrehBackdrop().ignoresSafeArea() }
         .navigationTitle(displayName.isEmpty ? hostFallback : displayName)
         .navigationBarTitleDisplayMode(.inline)
         // Persist identity edits to this server's registry entry. When it's the
@@ -2252,7 +2252,7 @@ struct AddServerView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 36)
             }
-            .background { GokuBackdrop().ignoresSafeArea() }
+            .background { SemrehBackdrop().ignoresSafeArea() }
             .navigationTitle("Add Server")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

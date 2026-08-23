@@ -718,7 +718,7 @@ struct ScheduledSessionsView: View {
         .listStyle(.plain)
         .environment(\.defaultMinListRowHeight, 0)
         .scrollContentBackground(.hidden)
-        .background { GokuBackdrop().ignoresSafeArea() }
+        .background { SemrehBackdrop().ignoresSafeArea() }
         .navigationTitle("Scheduled sessions")
         .searchable(text: $searchText, prompt: "Search sessions")
     }
@@ -1173,7 +1173,7 @@ struct SidebarSelectedSubrowIndicator: View {
     var body: some View {
         Image(systemName: "checkmark")
             .font(.caption2.weight(.bold))
-            .foregroundStyle(GokuVisualTheme.accentForeground(for: colorScheme, palette: palette))
+            .foregroundStyle(SemrehVisualTheme.accentForeground(for: colorScheme, palette: palette))
             .frame(width: 18, height: 18)
             .background(Color.accentColor, in: Circle())
             .accessibilityHidden(true)

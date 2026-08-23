@@ -233,7 +233,7 @@ final class FilePreviewViewModel {
 
     private var exportFilename: String {
         let lastPathComponent = URL(fileURLWithPath: path).lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
-        return lastPathComponent.isEmpty ? String(localized: "Goku File") : lastPathComponent
+        return lastPathComponent.isEmpty ? String(localized: "Semreh File") : lastPathComponent
     }
 }
 

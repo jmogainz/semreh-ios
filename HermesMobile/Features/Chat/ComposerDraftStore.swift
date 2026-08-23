@@ -8,7 +8,7 @@ import Foundation
 final class ComposerDraftStore {
     static let shared = ComposerDraftStore()
 
-    static let visibilityKeyPrefix = "goku.composerDraft."
+    static let visibilityKeyPrefix = "semreh.composerDraft."
 
     private let defaults: UserDefaults
 
@@ -70,7 +70,7 @@ struct TranscriptRestorePoint: Equatable {
 @MainActor
 final class TranscriptRestoreStore {
     static let shared = TranscriptRestoreStore()
-    static let visibilityKeyPrefix = "goku.transcriptRestore."
+    static let visibilityKeyPrefix = "semreh.transcriptRestore."
 
     private let defaults: UserDefaults
 
@@ -159,7 +159,7 @@ struct LiveRunBookmark: Equatable, Codable {
 @MainActor
 final class LiveRunBookmarkStore {
     static let shared = LiveRunBookmarkStore()
-    static let visibilityKeyPrefix = "goku.liveRunBookmark."
+    static let visibilityKeyPrefix = "semreh.liveRunBookmark."
     static let maxReasoningCharacters = 8_192
 
     private let defaults: UserDefaults

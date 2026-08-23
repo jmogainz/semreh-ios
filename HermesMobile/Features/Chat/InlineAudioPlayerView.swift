@@ -70,7 +70,7 @@ struct InlineAudioPlayerView: View {
                     Circle().fill(Color.accentColor)
                     Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(GokuVisualTheme.accentForeground(for: colorScheme, palette: palette))
+                        .foregroundStyle(SemrehVisualTheme.accentForeground(for: colorScheme, palette: palette))
                 }
                 .frame(width: 40, height: 40)
             }

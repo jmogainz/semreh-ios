@@ -1,8 +1,8 @@
-# Goku — Project Intent
+# Semreh — Project Intent
 
 This file is for fast orientation only. `PROJECT_SPEC.md` remains the source of truth for product scope, API behavior, build phases, dependencies, and open decisions.
 
-Goku is a native iPhone control surface for a self-hosted Hermes AI agent stack. The phone is the control plane and review surface; the macOS/server-side Hermes WebUI stack is the execution plane.
+Semreh is a native iPhone control surface for a self-hosted Hermes AI agent stack. The phone is the control plane and review surface; the macOS/server-side Hermes WebUI stack is the execution plane.
 
 ## Mental Model
 

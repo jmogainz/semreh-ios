@@ -134,7 +134,7 @@ private struct GitBranchPickerSheet: View {
             }
         }
         .alert("New Branch", isPresented: $showsCreatePrompt) {
-            TextField("goku/my-feature", text: $newBranchName)
+            TextField("semreh/my-feature", text: $newBranchName)
             Button("Cancel", role: .cancel) {}
             Button("Create") {
                 let name = newBranchName.trimmingCharacters(in: .whitespacesAndNewlines)

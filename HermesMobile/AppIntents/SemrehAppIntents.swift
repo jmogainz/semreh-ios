@@ -27,12 +27,12 @@ final class AppIntentRouter {
     }
 }
 
-/// "New Chat" — opens Goku on the New Chat composer, mirroring the in-app "+" button
+/// "New Chat" — opens Semreh on the New Chat composer, mirroring the in-app "+" button
 /// (no server session is created until the first message). Available to the Action button,
-/// Shortcuts, Spotlight, and Siri via `GokuShortcuts`.
+/// Shortcuts, Spotlight, and Siri via `SemrehShortcuts`.
 struct NewChatIntent: AppIntent {
     static var title: LocalizedStringResource = "New Chat"
-    static var description = IntentDescription("Open Goku on a new, empty chat.")
+    static var description = IntentDescription("Open Semreh on a new, empty chat.")
 
     /// Foregrounds the app so the navigation can run in-process.
     static var openAppWhenRun: Bool = true
@@ -44,7 +44,7 @@ struct NewChatIntent: AppIntent {
     }
 }
 
-/// "New Chat with Voice" — opens Goku on the New Chat composer and auto-starts voice
+/// "New Chat with Voice" — opens Semreh on the New Chat composer and auto-starts voice
 /// dictation, so an Action-button press starts a hands-free chat (no second tap on the mic).
 /// Routes through the same `AppIntentRouter`/deep-link plumbing as `NewChatIntent`, but on a
 /// distinct host so the composer knows to begin listening once it's on screen (issue #338).
@@ -52,7 +52,7 @@ struct NewChatIntent: AppIntent {
 /// the system prompt appears, and if it's denied the composer shows a clear error instead.
 struct NewChatVoiceIntent: AppIntent {
     static var title: LocalizedStringResource = "New Chat with Voice"
-    static var description = IntentDescription("Open Goku on a new chat and start voice dictation.")
+    static var description = IntentDescription("Open Semreh on a new chat and start voice dictation.")
 
     /// Foregrounds the app so the navigation — and the microphone — can run in-process.
     static var openAppWhenRun: Bool = true
@@ -64,14 +64,14 @@ struct NewChatVoiceIntent: AppIntent {
     }
 }
 
-/// "New Chat in <Profile>" — opens Goku on a new chat pinned to a specific server profile
+/// "New Chat in <Profile>" — opens Semreh on a new chat pinned to a specific server profile
 /// the user picks when configuring the Shortcut/Siri phrase (issue #339). The chosen
 /// `ProfileEntity` is carried through the same `AppIntentRouter`/deep-link plumbing as the
 /// other New Chat intents, on its own host (`new-chat-profile`) with the profile name as a
 /// query item, so `PendingNewChatView` can create the session pinned to it.
 struct NewChatInProfileIntent: AppIntent {
     static var title: LocalizedStringResource = "New Chat in Profile"
-    static var description = IntentDescription("Open Goku on a new chat pinned to a specific profile.")
+    static var description = IntentDescription("Open Semreh on a new chat pinned to a specific profile.")
 
     /// Foregrounds the app so the navigation can run in-process.
     static var openAppWhenRun: Bool = true
@@ -92,11 +92,11 @@ struct NewChatInProfileIntent: AppIntent {
     }
 }
 
-/// Registers Goku's App Shortcuts. iOS discovers this conformance automatically at build
+/// Registers Semreh's App Shortcuts. iOS discovers this conformance automatically at build
 /// time — it does not need to be referenced from the `App` struct. Exposing the intent here
 /// is what makes "New Chat" appear in the Shortcuts app, Spotlight, and Siri, and assignable
 /// to the iPhone Action button.
-struct GokuShortcuts: AppShortcutsProvider {
+struct SemrehShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: NewChatIntent(),

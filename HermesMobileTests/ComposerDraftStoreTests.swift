@@ -5,7 +5,7 @@ import XCTest
 final class ComposerDraftStoreTests: XCTestCase {
     private var defaults: UserDefaults!
     private var store: ComposerDraftStore!
-    private let server = URL(string: "https://goku.example")!
+    private let server = URL(string: "https://semreh.example")!
 
     override func setUp() {
         super.setUp()
@@ -80,7 +80,7 @@ final class ComposerDraftStoreTests: XCTestCase {
 final class TranscriptRestoreStoreTests: XCTestCase {
     private var defaults: UserDefaults!
     private var store: TranscriptRestoreStore!
-    private let server = URL(string: "https://goku.example")!
+    private let server = URL(string: "https://semreh.example")!
 
     override func setUp() {
         super.setUp()
@@ -130,7 +130,7 @@ final class TranscriptRestoreStoreTests: XCTestCase {
 final class LiveRunBookmarkStoreTests: XCTestCase {
     private var defaults: UserDefaults!
     private var store: LiveRunBookmarkStore!
-    private let server = URL(string: "https://goku.example")!
+    private let server = URL(string: "https://semreh.example")!
 
     override func setUp() {
         super.setUp()

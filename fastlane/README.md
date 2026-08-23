@@ -1,6 +1,6 @@
 # Fastlane
 
-Maintainer-only release automation for Goku.
+Maintainer-only release automation for Semreh.
 
 ```bash
 bundle install

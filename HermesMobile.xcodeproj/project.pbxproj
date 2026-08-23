@@ -19,7 +19,7 @@
 		0D82B28493C6401D98DA9C0E /* SlashCommandExecutorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6809B8F1391248A4AA77C453 /* SlashCommandExecutorTests.swift */; };
 		1A2B3C4D5E6F700000000001 /* HermesMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F700000000011 /* HermesMobileApp.swift */; };
 		1A2B3C4D5E6F700000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F700000000012 /* ContentView.swift */; };
-		1A2B3C4D5E6F700000000338 /* GokuAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F700000000337 /* GokuAppIntents.swift */; };
+		1A2B3C4D5E6F700000000338 /* SemrehAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F700000000337 /* SemrehAppIntents.swift */; };
 		1A2B3C4D5E6F700000000343 /* ProfileEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F700000000342 /* ProfileEntity.swift */; };
 		1A2B3C4D5E6F700000000341 /* AppIntentNewChatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F700000000340 /* AppIntentNewChatTests.swift */; };
 		1A2B3C4D5E6F700000000345 /* AppIntentNewChatInProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F700000000344 /* AppIntentNewChatInProfileTests.swift */; };
@@ -195,7 +195,7 @@
 		1A2B3C4D5E6F7000000000F8 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7000000000F9 /* AppConfig.swift */; };
 		C09200000000000000000001 /* AppFont.swift in Sources */ = {isa = PBXBuildFile; fileRef = C09200000000000000000002 /* AppFont.swift */; };
 		1A2B3C4D5E6F700000000100 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F700000000101 /* AppTheme.swift */; };
-		C0A120000000000000000002 /* GokuVisualTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A120000000000000000001 /* GokuVisualTheme.swift */; };
+		C0A120000000000000000002 /* SemrehVisualTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A120000000000000000001 /* SemrehVisualTheme.swift */; };
 		C012400000000000000002 /* AppIconChoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = C012400000000000000001 /* AppIconChoice.swift */; };
 		C03120000000000000B001 /* GitWorkspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = C03120000000000000F001 /* GitWorkspace.swift */; };
 		C03120000000000000B002 /* APIClient+Git.swift in Sources */ = {isa = PBXBuildFile; fileRef = C03120000000000000F002 /* APIClient+Git.swift */; };
@@ -368,7 +368,7 @@
 		1A2B3C4D5E6F700000000010 /* HermesMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HermesMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A2B3C4D5E6F700000000011 /* HermesMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesMobileApp.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F700000000012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		1A2B3C4D5E6F700000000337 /* GokuAppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GokuAppIntents.swift; sourceTree = "<group>"; };
+		1A2B3C4D5E6F700000000337 /* SemrehAppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemrehAppIntents.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F700000000342 /* ProfileEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileEntity.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F700000000340 /* AppIntentNewChatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIntentNewChatTests.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F700000000344 /* AppIntentNewChatInProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIntentNewChatInProfileTests.swift; sourceTree = "<group>"; };
@@ -539,7 +539,7 @@
 		1A2B3C4D5E6F7000000000F9 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		C09200000000000000000002 /* AppFont.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFont.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F700000000101 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
-		C0A120000000000000000001 /* GokuVisualTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GokuVisualTheme.swift; sourceTree = "<group>"; };
+		C0A120000000000000000001 /* SemrehVisualTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemrehVisualTheme.swift; sourceTree = "<group>"; };
 		C012400000000000000001 /* AppIconChoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconChoice.swift; sourceTree = "<group>"; };
 		C03120000000000000F001 /* GitWorkspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitWorkspace.swift; sourceTree = "<group>"; };
 		C03120000000000000F002 /* APIClient+Git.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "APIClient+Git.swift"; sourceTree = "<group>"; };
@@ -1135,7 +1135,7 @@
 				1A2B3C4D5E6F7000000000F9 /* AppConfig.swift */,
 				C09200000000000000000002 /* AppFont.swift */,
 				1A2B3C4D5E6F700000000101 /* AppTheme.swift */,
-				C0A120000000000000000001 /* GokuVisualTheme.swift */,
+				C0A120000000000000000001 /* SemrehVisualTheme.swift */,
 				C012400000000000000001 /* AppIconChoice.swift */,
 			);
 			path = Config;
@@ -1182,7 +1182,7 @@
 		1A2B3C4D5E6F700000000339 /* AppIntents */ = {
 			isa = PBXGroup;
 			children = (
-				1A2B3C4D5E6F700000000337 /* GokuAppIntents.swift */,
+				1A2B3C4D5E6F700000000337 /* SemrehAppIntents.swift */,
 				1A2B3C4D5E6F700000000342 /* ProfileEntity.swift */,
 			);
 			path = AppIntents;
@@ -1439,7 +1439,7 @@
 			files = (
 				1A2B3C4D5E6F700000000001 /* HermesMobileApp.swift in Sources */,
 				1A2B3C4D5E6F700000000002 /* ContentView.swift in Sources */,
-				1A2B3C4D5E6F700000000338 /* GokuAppIntents.swift in Sources */,
+				1A2B3C4D5E6F700000000338 /* SemrehAppIntents.swift in Sources */,
 				1A2B3C4D5E6F700000000343 /* ProfileEntity.swift in Sources */,
 				1A2B3C4D5E6F7000000000A1 /* AuthManager.swift in Sources */,
 				1A2B3C4D5E6F700000000300 /* ServerAccount.swift in Sources */,
@@ -1521,7 +1521,7 @@
 				1A2B3C4D5E6F7000000000F8 /* AppConfig.swift in Sources */,
 				C09200000000000000000001 /* AppFont.swift in Sources */,
 				1A2B3C4D5E6F700000000100 /* AppTheme.swift in Sources */,
-				C0A120000000000000000002 /* GokuVisualTheme.swift in Sources */,
+				C0A120000000000000000002 /* SemrehVisualTheme.swift in Sources */,
 				C012400000000000000002 /* AppIconChoice.swift in Sources */,
 				C09300000000000000000001 /* HapticButton.swift in Sources */,
 				C0FF000000000000000000B1 /* CustomHeadersEditor.swift in Sources */,
@@ -1782,7 +1782,7 @@
 			baseConfigurationReference = 351C0F1600000000000000A1 /* Shared.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				APP_DISPLAY_NAME = Goku;
+				APP_DISPLAY_NAME = Semreh;
 				APP_URL_SCHEME_SUFFIX = "";
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -1831,7 +1831,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				HERMES_URL_SCHEME = "goku$(APP_URL_SCHEME_SUFFIX)";
+				HERMES_URL_SCHEME = "semreh$(APP_URL_SCHEME_SUFFIX)";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				KEYCHAIN_SERVICE = "$(APP_BUNDLE_IDENTIFIER)";
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
@@ -1849,7 +1849,7 @@
 			baseConfigurationReference = 351C0F1600000000000000A1 /* Shared.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				APP_DISPLAY_NAME = Goku;
+				APP_DISPLAY_NAME = Semreh;
 				APP_URL_SCHEME_SUFFIX = "";
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -1892,7 +1892,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				HERMES_URL_SCHEME = "goku$(APP_URL_SCHEME_SUFFIX)";
+				HERMES_URL_SCHEME = "semreh$(APP_URL_SCHEME_SUFFIX)";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				KEYCHAIN_SERVICE = "$(APP_BUNDLE_IDENTIFIER)";
 				MTL_ENABLE_DEBUG_INFO = NO;

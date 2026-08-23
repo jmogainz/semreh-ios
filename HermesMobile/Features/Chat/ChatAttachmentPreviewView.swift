@@ -127,7 +127,7 @@ struct ChatAttachmentPreviewView: View {
             }
             .navigationTitle(item.displayName)
             .navigationBarTitleDisplayMode(.inline)
-            .background { GokuBackdrop().ignoresSafeArea() }
+            .background { SemrehBackdrop().ignoresSafeArea() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {

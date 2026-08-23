@@ -11,7 +11,7 @@ struct FilePreviewView: View {
     @State private var selectableText: SelectableTextPresentation?
     @State private var exportDocument = ExportedFileDocument(data: Data())
     @State private var exportContentType = UTType.data
-    @State private var exportFilename = String(localized: "Goku File")
+    @State private var exportFilename = String(localized: "Semreh File")
     @State private var isFileExporterPresented = false
     @State private var exportErrorMessage: String?
     @State private var saveConfirmationMessage: String?
@@ -49,7 +49,7 @@ struct FilePreviewView: View {
             }
         }
         .adaptiveReadableScrollContent(maxWidth: AdaptiveReadableContentWidth.workspace)
-        .background { GokuBackdrop().ignoresSafeArea() }
+        .background { SemrehBackdrop().ignoresSafeArea() }
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

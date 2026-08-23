@@ -18,7 +18,7 @@ platform :ios do
     team_id = ENV.fetch("TEAM_ID", "U8G25F98S2")
     scheme = ENV.fetch("SCHEME", "HermesMobile")
     marketing_version = required_env!("MARKETING_VERSION")
-    bundle_id = ENV.fetch("BUNDLE_ID", "com.jacobmoore.goku")
+    bundle_id = ENV.fetch("BUNDLE_ID", "com.jacobmoore.semreh")
 
     project = absolutize(ENV.fetch("PROJECT_PATH", "HermesMobile.xcodeproj"), repo_root)
     export_options = absolutize(ENV.fetch("EXPORT_OPTIONS_PLIST", "ci/TestFlightExportIPA.plist"), repo_root)
@@ -65,7 +65,7 @@ platform :ios do
       destination: "generic/platform=iOS",
       derived_data_path: derived_data,
       output_directory: output_directory,
-      output_name: "Goku",
+      output_name: "Semreh",
       export_method: "app-store",
       export_options: export_options,
       xcargs: xcargs,
