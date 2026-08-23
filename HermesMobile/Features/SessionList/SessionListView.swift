@@ -63,7 +63,6 @@ struct SessionListView: View {
     // Configured in `init`, where the server URL is known.
     @AppStorage private var showsCliSessions: Bool
     @AppStorage private var showsClaudeCodeSessions: Bool
-    @AppStorage(HeaderLogoColor.storageKey) private var headerLogoColorHex = HeaderLogoColor.defaultHex
     @AppStorage(PrimaryActionTintSettings.isEnabledKey) private var tintsPrimaryActions = false
     @AppStorage(GlassPreference.isEnabledKey) private var isGlassEnabled = GlassPreference.defaultIsEnabled
     @AppStorage(SessionIdentitySettings.displayNameKey) private var identityDisplayName = ""
@@ -835,7 +834,7 @@ struct SessionListView: View {
     }
 
     private var selectedHeaderLogoColor: Color {
-        HeaderLogoColor.color(for: headerLogoColorHex)
+        SemrehVisualTheme.brandActionColor(for: palette)
     }
 
     private var newSessionButtonUsesThemeColor: Bool {
@@ -876,14 +875,14 @@ struct SessionListView: View {
 
     private var newSessionButtonForegroundColor: Color {
         if newSessionButtonUsesThemeColor {
-            return HeaderLogoColor.prefersDarkForeground(for: headerLogoColorHex) ? .black : .white
+            return SemrehVisualTheme.energyForeground(for: palette)
         }
 
         return colorScheme == .dark ? .black : .white
     }
 
     private var initialsAvatarForegroundColor: Color {
-        HeaderLogoColor.prefersDarkForeground(for: headerLogoColorHex) ? .black : .white
+        SemrehVisualTheme.energyForeground(for: palette)
     }
 
     private var normalizedSearchText: String {

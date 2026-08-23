@@ -79,7 +79,6 @@ struct SettingsView: View {
     @AppStorage(ChatTranscriptDisplaySettings.wrapsCodeBlockLinesKey) private var wrapsCodeBlockLines = false
     @AppStorage(ChatTranscriptDisplaySettings.rtlChatLayoutEnabledKey) private var rtlChatLayoutEnabled = ChatTranscriptDisplaySettings.rtlChatLayoutDefaultEnabled
     @AppStorage(StreamedTextAnimationSettings.isEnabledKey) private var isStreamedTextAnimationEnabled = true
-    @AppStorage(HeaderLogoColor.storageKey) private var headerLogoColorHex = HeaderLogoColor.defaultHex
     @AppStorage(PrimaryActionTintSettings.isEnabledKey) private var tintsPrimaryActions = false
     @AppStorage(SessionIdentitySettings.displayNameKey) private var identityDisplayName = ""
     @AppStorage(SessionIdentitySettings.initialsKey) private var identityInitials = ""
@@ -94,6 +93,8 @@ struct SettingsView: View {
     @AppStorage(SectionVisibilitySettings.chatGitKey) private var showsChatGitControls = true
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -104,8 +105,8 @@ struct SettingsView: View {
                         displayName: $identityDisplayName,
                         initials: identityInitialsBinding,
                         previewInitials: identityPreviewInitials,
-                        previewColor: HeaderLogoColor.color(for: headerLogoColorHex),
-                        previewForeground: HeaderLogoColor.prefersDarkForeground(for: headerLogoColorHex) ? .black : .white
+                        previewColor: SemrehVisualTheme.brandActionColor(for: palette),
+                        previewForeground: SemrehVisualTheme.energyForeground(for: palette)
                     )
                 }
 
@@ -129,14 +130,7 @@ struct SettingsView: View {
                         }
                     }
 
-                    SettingsFootnote(String(localized: "Semreh, Light, and Dark keep the Semreh colors. Other themes restyle the whole app and still follow your Light/Dark system setting."))
-
-                    SettingsDivider()
-
-                    HeaderLogoColorSettings(
-                        selectedHex: $headerLogoColorHex,
-                        customColor: headerLogoColorBinding
-                    )
+                    SettingsFootnote(String(localized: "Semreh follows your system appearance. Goku Light and Goku Dark keep the legacy Goku colors; other themes restyle the app."))
 
                     SettingsDivider()
 
@@ -146,7 +140,7 @@ struct SettingsView: View {
                         isOn: $tintsPrimaryActions
                     )
 
-                    SettingsFootnote(String(localized: "Apply your header color to these primary buttons."))
+                    SettingsFootnote(String(localized: "Apply the active theme accent to these primary buttons."))
                 }
 
                 SettingsCard(title: String(localized: "Interaction")) {
@@ -645,13 +639,10 @@ struct SettingsView: View {
         } message: {
             Text(signOutMessage)
         }
-        // The Identity + Header Logo Color controls edit the *active* server (#17):
-        // mirror their global @AppStorage value through to that server's registry
-        // entry so it survives a switch and a relaunch. The @AppStorage write keeps
-        // the live avatar/tint instant; this just persists it per server.
+        // Identity edits persist to the active server; its visual accent follows
+        // the selected app theme rather than a per-profile color preference.
         .onChange(of: identityDisplayName) { syncActiveServerIdentity() }
         .onChange(of: identityInitials) { syncActiveServerIdentity() }
-        .onChange(of: headerLogoColorHex) { syncActiveServerIdentity() }
         .sheet(isPresented: $isPresentingAddServer) {
             AddServerView(authManager: authManager)
         }
@@ -726,16 +717,16 @@ struct SettingsView: View {
         authManager.servers.first { $0.id == authManager.activeServerID }
     }
 
-    /// Pushes the current global identity values (which the Identity + Header Logo
-    /// Color controls edit) into the active server's registry entry, so per-server
-    /// identity follows the active server (#17). Single-server users see no change.
+    /// Pushes the current identity values into the active server's registry entry.
+    /// The stored legacy color field is preserved for decode compatibility, but
+    /// no longer controls any profile/avatar rendering.
     private func syncActiveServerIdentity() {
         guard let account = activeAccount else { return }
         authManager.updateServerIdentity(
             account,
             displayName: identityDisplayName,
             initials: identityInitials,
-            headerLogoColorHex: headerLogoColorHex
+            headerLogoColorHex: account.headerLogoColorHex
         )
     }
 
@@ -828,17 +819,6 @@ struct SettingsView: View {
                     Task {
                         await refreshNotificationPermissionStatus()
                     }
-                }
-            }
-        )
-    }
-
-    private var headerLogoColorBinding: Binding<Color> {
-        Binding(
-            get: { HeaderLogoColor.color(for: headerLogoColorHex) },
-            set: { color in
-                if let hex = HeaderLogoColor.hexString(from: color) {
-                    headerLogoColorHex = hex
                 }
             }
         )
@@ -1409,75 +1389,6 @@ private struct SettingsTextFieldRow: View {
     }
 }
 
-private struct HeaderLogoColorSettings: View {
-    @Binding var selectedHex: String
-    let customColor: Binding<Color>
-
-    private var selectedColorName: String {
-        HeaderLogoColor.displayName(for: selectedHex)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                Text("Header Logo Color")
-                    .foregroundStyle(.primary)
-
-                Spacer(minLength: 12)
-
-                Text(selectedColorName)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-            }
-            .font(.subheadline)
-
-            HStack(spacing: 10) {
-                ForEach(HeaderLogoColor.presets) { preset in
-                    HeaderLogoColorPresetButton(
-                        preset: preset,
-                        isSelected: HeaderLogoColor.normalizedHex(selectedHex) == preset.hex
-                    ) {
-                        selectedHex = preset.hex
-                    }
-                }
-            }
-
-            ColorPicker("Custom", selection: customColor, supportsOpacity: false)
-                .font(.subheadline)
-        }
-    }
-}
-
-private struct HeaderLogoColorPresetButton: View {
-    let preset: HeaderLogoColorPreset
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            ZStack {
-                Circle()
-                    .fill(preset.color)
-                    .overlay(Circle().stroke(Color.primary.opacity(0.18), lineWidth: 1))
-
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(preset.hex == "#FFFFFF" ? .black : .white)
-                        .accessibilityHidden(true)
-                }
-            }
-            .frame(width: 34, height: 34)
-            .frame(width: 44, height: 44)
-            .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(String(localized: "\(preset.name) header logo color"))
-        .accessibilityValue(isSelected ? "Selected" : "")
-        .accessibilityHint("Updates the Sessions header logo color.")
-    }
-}
-
 private struct SettingsCard<Content: View>: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.appColorPalette) private var palette
@@ -1893,19 +1804,20 @@ private struct SettingsDivider: View {
 
 // MARK: - Multi-server (#17)
 
-/// Small circular avatar (initials + per-server Header Logo Color) for server rows.
+/// Small circular avatar whose accent follows the active app theme.
 private struct ServerAvatarBadge: View {
     let initials: String
-    let colorHex: String
     var size: CGFloat = 32
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
 
     var body: some View {
         Text(initials)
             .font(AppFont.caption(weight: .semibold))
-            .foregroundStyle(HeaderLogoColor.prefersDarkForeground(for: colorHex) ? Color.black : Color.white)
+            .foregroundStyle(SemrehVisualTheme.energyForeground(for: palette))
             .frame(width: size, height: size)
-            .background(HeaderLogoColor.color(for: colorHex), in: Circle())
-            .overlay(Circle().stroke(.white.opacity(0.18), lineWidth: 1))
+            .background(SemrehVisualTheme.brandActionColor(for: palette), in: Circle())
+            .overlay(Circle().stroke(.white.opacity(colorScheme == .dark ? 0.24 : 0.34), lineWidth: 1))
             .accessibilityHidden(true)
     }
 }
@@ -1933,7 +1845,7 @@ private struct SettingsServerRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ServerAvatarBadge(initials: previewInitials, colorHex: account.headerLogoColorHex)
+            ServerAvatarBadge(initials: previewInitials)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
@@ -1967,12 +1879,12 @@ private struct SettingsServerRow: View {
     }
 }
 
-/// Reusable per-server identity editor (display name, initials, Header Logo Color),
-/// used by the add-server flow and the server detail screen (#17).
+/// Reusable per-server identity editor (display name and initials), used by the
+/// add-server flow and the server detail screen (#17). Visual accents follow the
+/// active app theme; they are no longer user-editable per profile.
 private struct ServerIdentityEditor: View {
     @Binding var displayName: String
     @Binding var initials: String
-    @Binding var colorHex: String
     /// Host-derived fallback used for the avatar preview when fields are empty.
     let fallbackName: String
 
@@ -1991,23 +1903,16 @@ private struct ServerIdentityEditor: View {
         )
     }
 
-    private var colorBinding: Binding<Color> {
-        Binding(
-            get: { HeaderLogoColor.color(for: colorHex) },
-            set: { if let hex = HeaderLogoColor.hexString(from: $0) { colorHex = hex } }
-        )
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                ServerAvatarBadge(initials: previewInitials, colorHex: colorHex, size: 36)
+                ServerAvatarBadge(initials: previewInitials, size: 36)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Server Avatar")
                         .font(AppFont.subheadline(weight: .medium))
 
-                    Text("Stored on this device only.")
+                    Text("Accent follows the selected app theme.")
                         .font(AppFont.caption())
                         .foregroundStyle(.secondary)
                 }
@@ -2022,10 +1927,6 @@ private struct ServerIdentityEditor: View {
             SettingsDivider()
 
             SettingsTextFieldRow(title: String(localized: "Initials"), text: initialsBinding, placeholder: previewInitials)
-
-            SettingsDivider()
-
-            HeaderLogoColorSettings(selectedHex: $colorHex, customColor: colorBinding)
         }
     }
 }
@@ -2039,7 +1940,6 @@ private struct ServerDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var displayName: String
     @State private var initials: String
-    @State private var colorHex: String
     @State private var isConfirmingRemove = false
     @State private var isRemoving = false
 
@@ -2048,7 +1948,6 @@ private struct ServerDetailView: View {
         self.account = account
         _displayName = State(initialValue: account.displayName)
         _initials = State(initialValue: account.initials)
-        _colorHex = State(initialValue: account.headerLogoColorHex)
     }
 
     private var isActive: Bool { account.id == authManager.activeServerID }
@@ -2072,7 +1971,6 @@ private struct ServerDetailView: View {
                     ServerIdentityEditor(
                         displayName: $displayName,
                         initials: $initials,
-                        colorHex: $colorHex,
                         fallbackName: hostFallback
                     )
                 }
@@ -2108,7 +2006,6 @@ private struct ServerDetailView: View {
         // the avatar / header tint update live (#17).
         .onChange(of: displayName) { persistIdentity() }
         .onChange(of: initials) { persistIdentity() }
-        .onChange(of: colorHex) { persistIdentity() }
         .alert(removeAlertTitle, isPresented: $isConfirmingRemove) {
             Button("Cancel", role: .cancel) {}
             Button(removeButtonTitle, role: .destructive) {
@@ -2139,11 +2036,12 @@ private struct ServerDetailView: View {
     }
 
     private func persistIdentity() {
+        // Keep the legacy stored color untouched for older serialized accounts.
         authManager.updateServerIdentity(
             account,
             displayName: displayName,
             initials: initials,
-            headerLogoColorHex: colorHex
+            headerLogoColorHex: account.headerLogoColorHex
         )
     }
 
@@ -2191,7 +2089,6 @@ struct AddServerView: View {
     @State private var errorMessage: String?
     @State private var displayName = ""
     @State private var initials = ""
-    @State private var colorHex = HeaderLogoColor.defaultHex
 
     private var trimmedURL: String {
         serverURLString.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2241,7 +2138,6 @@ struct AddServerView: View {
                         ServerIdentityEditor(
                             displayName: $displayName,
                             initials: $initials,
-                            colorHex: $colorHex,
                             fallbackName: derivedHost
                         )
                     }
@@ -2323,7 +2219,7 @@ struct AddServerView: View {
             account,
             displayName: finalName,
             initials: finalInitials,
-            headerLogoColorHex: colorHex
+            headerLogoColorHex: account.headerLogoColorHex
         )
     }
 }

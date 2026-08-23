@@ -59,7 +59,6 @@ struct MessageComposerView: View {
     @Environment(\.appColorPalette) private var palette
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage(HeaderLogoColor.storageKey) private var headerLogoColorHex = HeaderLogoColor.defaultHex
     @AppStorage(PrimaryActionTintSettings.isEnabledKey) private var tintsPrimaryActions = false
     @ScaledMetric(relativeTo: .footnote) private var actionIconSize: CGFloat = 13
     @ScaledMetric(relativeTo: .footnote) private var actionButtonSize: CGFloat = 30
@@ -978,7 +977,7 @@ struct MessageComposerView: View {
             isEnabled: tintsPrimaryActions,
             controlIsEnabled: !isActionButtonDisabled
         ) {
-            return HeaderLogoColor.color(for: headerLogoColorHex)
+            return SemrehVisualTheme.action(for: colorScheme, palette: palette)
         }
 
         if isActionButtonDisabled {
@@ -993,7 +992,7 @@ struct MessageComposerView: View {
             isEnabled: tintsPrimaryActions,
             controlIsEnabled: !isActionButtonDisabled
         ) {
-            return HeaderLogoColor.prefersDarkForeground(for: headerLogoColorHex) ? .black : .white
+            return SemrehVisualTheme.accentForeground(for: colorScheme, palette: palette)
         }
 
         if isActionButtonDisabled {

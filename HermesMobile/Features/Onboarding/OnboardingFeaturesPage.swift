@@ -2,44 +2,50 @@ import SwiftUI
 
 struct OnboardingFeaturesPage: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
 
-    private let features: [(icon: String, color: Color, title: String, subtitle: String)] = [
-        ("bubble.left.and.bubble.right.fill", Color(red: 1.0, green: 0.74, blue: 0.10), String(localized: "Chat with Semreh from iPhone"), String(localized: "Drive conversations from anywhere on your tailnet.")),
-        ("list.bullet.rectangle.portrait.fill", .green, String(localized: "Manage sessions, tasks, and files remotely"), String(localized: "Browse workspaces and stay on top of agent work.")),
-        ("mic.fill", .purple, String(localized: "Voice input and mobile-friendly composer controls"), String(localized: "Compose naturally with touch-first controls.")),
-        ("checkmark.shield.fill", .cyan, String(localized: "Review approvals and clarifications inline"), String(localized: "Respond to agent prompts without switching apps.")),
-        ("server.rack", .orange, String(localized: "Self-hosted: your machine, your tailnet"), String(localized: "Your Hermes Web UI stays on hardware you control."))
+    private let features: [(icon: String, title: String, subtitle: String)] = [
+        ("bubble.left.and.bubble.right.fill", String(localized: "Chat with Semreh from iPhone"), String(localized: "Drive conversations from anywhere on your tailnet.")),
+        ("list.bullet.rectangle.portrait.fill", String(localized: "Manage sessions, tasks, and files remotely"), String(localized: "Browse workspaces and stay on top of agent work.")),
+        ("mic.fill", String(localized: "Voice input and mobile-friendly composer controls"), String(localized: "Compose naturally with touch-first controls.")),
+        ("checkmark.shield.fill", String(localized: "Review approvals and clarifications inline"), String(localized: "Respond to agent prompts without switching apps.")),
+        ("server.rack", String(localized: "Self-hosted: your machine, your tailnet"), String(localized: "Your Hermes Web UI stays on hardware you control."))
     ]
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            VStack(spacing: dynamicTypeSize.isAccessibilitySize ? 28 : 36) {
-                VStack(spacing: 10) {
+            VStack(spacing: dynamicTypeSize.isAccessibilitySize ? 24 : 28) {
+                Image("SemrehWing")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 78)
+                    .accessibilityHidden(true)
+                    .padding(.top, 24)
+
+                VStack(spacing: 9) {
                     Text("What you get")
-                        .font(.system(size: dynamicTypeSize.isAccessibilitySize ? 26 : 28, weight: .bold))
-                        .foregroundStyle(.white)
+                        .font(.system(size: dynamicTypeSize.isAccessibilitySize ? 26 : 29, weight: .bold))
+                        .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme))
 
                     Text("Semreh, reachable from iPhone over Tailscale.")
                         .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme))
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.top, 24)
 
-                VStack(spacing: 16) {
+                VStack(spacing: 10) {
                     ForEach(Array(features.enumerated()), id: \.offset) { _, feature in
                         OnboardingFeatureRow(
                             icon: feature.icon,
-                            color: feature.color,
                             title: feature.title,
                             subtitle: feature.subtitle
                         )
                     }
                 }
             }
-            .padding(.horizontal, 28)
-            .padding(.bottom, 24)
+            .padding(.horizontal, 22)
+            .padding(.bottom, 92)
         }
         .scrollBounceBehavior(.basedOnSize)
     }
@@ -47,35 +53,44 @@ struct OnboardingFeaturesPage: View {
 
 struct OnboardingFeatureRow: View {
     let icon: String
-    let color: Color
     let title: String
     let subtitle: String
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .top, spacing: 14) {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(color)
-                .frame(width: 40, height: 40)
+                .foregroundStyle(OnboardingTheme.action(for: colorScheme))
+                .frame(width: 42, height: 42)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(color.opacity(0.12))
+                    OnboardingTheme.action(for: colorScheme).opacity(colorScheme == .dark ? 0.16 : 0.10),
+                    in: RoundedRectangle(cornerRadius: 13, style: .continuous)
                 )
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme))
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(subtitle)
                     .font(.caption)
-                    .foregroundStyle(.white.opacity(0.4))
+                    .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer(minLength: 0)
         }
+        .padding(14)
+        .background(
+            OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.70 : 0.90),
+            in: RoundedRectangle(cornerRadius: 17, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                .stroke(OnboardingTheme.border(for: colorScheme).opacity(0.72), lineWidth: 1)
+        )
         .accessibilityElement(children: .combine)
     }
 }

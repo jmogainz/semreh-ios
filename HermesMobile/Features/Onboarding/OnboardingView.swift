@@ -8,6 +8,7 @@ struct OnboardingView: View {
     @State private var hasBypassedCopyReminder = false
     @State private var isShowingCopyReminder = false
     @FocusState private var focusedField: OnboardingConnectField?
+    @Environment(\.colorScheme) private var colorScheme
 
     init(authManager: AuthManager, savedServer: URL? = nil) {
         self.authManager = authManager
@@ -37,7 +38,8 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            SemrehBackdrop()
+                .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 TabView(selection: $currentPage) {
@@ -72,7 +74,6 @@ struct OnboardingView: View {
             }
         }
         .animation(.easeInOut(duration: 0.18), value: isEditingConnectionField)
-        .preferredColorScheme(.dark)
         .onChange(of: currentPage) { oldPage, newPage in
             handlePageChange(from: oldPage, to: newPage)
         }
@@ -101,18 +102,9 @@ struct OnboardingView: View {
             } else {
                 Button(action: handlePrimaryAction) {
                     Text(OnboardingFlowPolicy.primaryButtonTitle(for: currentPage))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.black)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 15)
-                        .background(
-                            Color(red: 1.0, green: 0.74, blue: 0.10),
-                            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(OnboardingPrimaryButtonStyle())
                 .accessibilityLabel(OnboardingFlowPolicy.primaryButtonTitle(for: currentPage))
 
                 if OnboardingFlowPolicy.showsServerShortcut(for: currentPage) {
@@ -120,7 +112,7 @@ struct OnboardingView: View {
                         jumpToConnectPage()
                     }
                     .font(.footnote.weight(.medium))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme))
                     .buttonStyle(.plain)
                     .accessibilityHint("Skips setup and opens the connect screen.")
                 }
@@ -129,16 +121,22 @@ struct OnboardingView: View {
         .padding(.horizontal, 24)
         .padding(.top, 12)
         .padding(.bottom, 12)
-        .background(
-            LinearGradient(
-                colors: [.clear, .black.opacity(0.6), .black],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 50)
-            .offset(y: -50),
-            alignment: .top
-        )
+        .background {
+            OnboardingTheme.panel(for: colorScheme)
+                .opacity(colorScheme == .dark ? 0.84 : 0.94)
+                .overlay(alignment: .top) {
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            OnboardingTheme.action(for: colorScheme).opacity(0.08)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 34)
+                    .offset(y: -34)
+                }
+        }
     }
 
     private var keyboardActionBar: some View {
