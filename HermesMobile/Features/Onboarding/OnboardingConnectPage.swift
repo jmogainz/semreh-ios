@@ -11,6 +11,7 @@ struct OnboardingConnectPage: View {
     @FocusState.Binding var focusedField: OnboardingConnectField?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isShowingAdvanced = false
 
     private var canSubmit: Bool {
@@ -28,11 +29,11 @@ struct OnboardingConnectPage: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Connect")
                         .font(.title3.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme))
 
                     Text("Enter the exact HTTPS Tailscale Serve URL your agent returned, for example `https://server.tailnet-name.ts.net`.")
                         .font(.footnote)
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme))
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -41,7 +42,7 @@ struct OnboardingConnectPage: View {
                         ZStack(alignment: .leading) {
                             if viewModel.serverURLString.isEmpty {
                                 Text(verbatim: "https://server.tailnet-name.ts.net")
-                                    .foregroundStyle(.white.opacity(0.38))
+                                    .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme))
                                     .allowsHitTesting(false)
                             }
 
@@ -49,9 +50,9 @@ struct OnboardingConnectPage: View {
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
                                 .keyboardType(.URL)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme))
                                 .submitLabel(.go)
-                                .tint(Color(red: 1.0, green: 0.74, blue: 0.10))
+                                .tint(OnboardingTheme.action(for: colorScheme))
                                 .focused($focusedField, equals: .serverURL)
                                 .onSubmit(submitConnection)
                         }
@@ -63,7 +64,7 @@ struct OnboardingConnectPage: View {
                                 "",
                                 text: $viewModel.password,
                                 prompt: Text("Server password")
-                                    .foregroundStyle(.white.opacity(0.38))
+                                    .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme))
                             )
                             .textContentType(.password)
                             .submitLabel(.go)
@@ -79,15 +80,15 @@ struct OnboardingConnectPage: View {
                 } label: {
                     Label("Advanced", systemImage: "slider.horizontal.3")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme).opacity(0.86))
                 }
-                .tint(.white.opacity(0.6))
+                .tint(OnboardingTheme.action(for: colorScheme).opacity(0.72))
 
                 if viewModel.isWorking {
                     OnboardingStatusBanner(
                         text: String(localized: "Checking server..."),
                         systemImage: "arrow.triangle.2.circlepath",
-                        tint: .white.opacity(0.7),
+                        tint: OnboardingTheme.action(for: colorScheme),
                         showsProgress: true
                     )
                 }
@@ -110,7 +111,7 @@ struct OnboardingConnectPage: View {
             }
             .padding(.horizontal, 22)
             .padding(.top, dynamicTypeSize.isAccessibilitySize ? 18 : 24)
-            .padding(.bottom, 24)
+            .padding(.bottom, 92)
         }
         .scrollBounceBehavior(.basedOnSize)
     }

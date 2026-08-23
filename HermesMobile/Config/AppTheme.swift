@@ -6,6 +6,9 @@ import UIKit
 #endif
 
 enum AppColorPalette: String, CaseIterable, Sendable {
+    /// Legacy Goku palette retained for users who explicitly chose Goku Light/Dark.
+    case goku
+    /// New Semreh palette used by the adaptive default theme.
     case semreh
     case chatgpt
     case midnight
@@ -31,9 +34,9 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .system:
             String(localized: "Semreh")
         case .light:
-            String(localized: "Light")
+            String(localized: "Goku Light")
         case .dark:
-            String(localized: "Dark")
+            String(localized: "Goku Dark")
         case .chatgpt:
             String(localized: "ChatGPT")
         case .midnight:
@@ -58,8 +61,10 @@ enum AppTheme: String, CaseIterable, Identifiable {
 
     var palette: AppColorPalette {
         switch self {
-        case .system, .light, .dark:
+        case .system:
             .semreh
+        case .light, .dark:
+            .goku
         case .chatgpt:
             .chatgpt
         case .midnight:
@@ -89,9 +94,12 @@ struct HeaderLogoColorPreset: Identifiable, Equatable {
 
 enum HeaderLogoColor {
     static let storageKey = "headerLogoColorHex"
-    static let defaultHex = "#FFD700"
+    static let defaultHex = "#12C7B5"
 
     static let presets: [HeaderLogoColorPreset] = [
+        HeaderLogoColorPreset(name: String(localized: "Teal"), hex: "#12C7B5"),
+        HeaderLogoColorPreset(name: String(localized: "Navy"), hex: "#032357"),
+        HeaderLogoColorPreset(name: String(localized: "Aqua"), hex: "#31D8CA"),
         HeaderLogoColorPreset(name: String(localized: "Yellow"), hex: "#FFD700"),
         HeaderLogoColorPreset(name: String(localized: "Blue"), hex: "#5B7CFF"),
         HeaderLogoColorPreset(name: String(localized: "Purple"), hex: "#AF52DE"),

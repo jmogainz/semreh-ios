@@ -14,20 +14,30 @@ extension EnvironmentValues {
 /// Product-wide semantic palette. Semreh stays the default; named themes swap
 /// canvas/action/energy tokens while keeping the same roles and contrast rules.
 enum SemrehVisualTheme {
+    // Legacy Goku palette constants. These stay stable for the explicit Goku Light/Dark options.
     static let giOrangeHex = "#F47A21"
     static let royalBlueHex = "#2166F3"
     static let energyGoldHex = "#FFD54A"
-    static let deepNavyHex = "#071426"
+    static let gokuDeepNavyHex = "#071426"
     static let skyBlueHex = "#73D5FF"
-    static let primaryActionForegroundHex = deepNavyHex
+
+    // Canonical Semreh logo colors.
+    static let logoNavyHex = "#032357"
+    static let logoTealHex = "#12C7B5"
+    static let logoAquaHex = "#31D8CA"
+    static let deepNavyHex = logoNavyHex
+    static let primaryActionForegroundHex = logoNavyHex
 
     static let giOrange = Color(hexRGB: giOrangeHex)!
     static let royalBlue = Color(hexRGB: royalBlueHex)!
     static let energyGold = Color(hexRGB: energyGoldHex)!
     static let deepNavy = Color(hexRGB: deepNavyHex)!
     static let skyBlue = Color(hexRGB: skyBlueHex)!
-    static let brandAction = giOrange
-    static let energy = energyGold
+    static let logoNavy = Color(hexRGB: logoNavyHex)!
+    static let logoTeal = Color(hexRGB: logoTealHex)!
+    static let logoAqua = Color(hexRGB: logoAquaHex)!
+    static let brandAction = logoTeal
+    static let energy = logoTeal
     static let primaryActionForeground = Color(hexRGB: primaryActionForegroundHex)!
 
     static func canvasHex(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> String {
@@ -186,15 +196,15 @@ enum SemrehVisualTheme {
 
     static func tokens(for palette: AppColorPalette) -> VisualThemeTokens {
         switch palette {
-        case .semreh:
+        case .goku:
             VisualThemeTokens(
                 brandActionHex: giOrangeHex,
                 energyHex: energyGoldHex,
-                energyForegroundHex: deepNavyHex,
+                energyForegroundHex: gokuDeepNavyHex,
                 actionLightHex: royalBlueHex,
                 actionDarkHex: skyBlueHex,
                 canvasLightHex: "#FFF8EE",
-                canvasDarkHex: deepNavyHex,
+                canvasDarkHex: gokuDeepNavyHex,
                 panelLightHex: "#FFFFFF",
                 panelDarkHex: "#102A4C",
                 raisedLightHex: "#FFFDF9",
@@ -202,10 +212,31 @@ enum SemrehVisualTheme {
                 brandAccentLightHex: "#9A3F00",
                 brandAccentDarkHex: "#FFB21C",
                 accentForegroundLightHex: "#FFFFFF",
-                accentForegroundDarkHex: deepNavyHex,
+                accentForegroundDarkHex: gokuDeepNavyHex,
                 backdropMidLightHex: "#F3F7FF",
                 backdropMidDarkHex: "#0B2342",
                 gradientMidHex: skyBlueHex
+            )
+        case .semreh:
+            VisualThemeTokens(
+                brandActionHex: logoTealHex,
+                energyHex: logoTealHex,
+                energyForegroundHex: logoNavyHex,
+                actionLightHex: "#006A72",
+                actionDarkHex: logoAquaHex,
+                canvasLightHex: "#F4F8FC",
+                canvasDarkHex: logoNavyHex,
+                panelLightHex: "#FFFFFF",
+                panelDarkHex: "#0A2E5B",
+                raisedLightHex: "#F8FBFD",
+                raisedDarkHex: "#104276",
+                brandAccentLightHex: "#005E64",
+                brandAccentDarkHex: logoAquaHex,
+                accentForegroundLightHex: "#FFFFFF",
+                accentForegroundDarkHex: logoNavyHex,
+                backdropMidLightHex: "#E7F3F4",
+                backdropMidDarkHex: "#062B55",
+                gradientMidHex: logoAquaHex
             )
         case .chatgpt:
             VisualThemeTokens(

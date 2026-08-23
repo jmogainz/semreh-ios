@@ -23,13 +23,15 @@ final class AppThemeTests: XCTestCase {
             "system", "light", "dark", "chatgpt", "midnight", "forest", "sand"
         ])
         XCTAssertEqual(AppTheme.system.title, "Semreh")
+        XCTAssertEqual(AppTheme.light.title, "Goku Light")
+        XCTAssertEqual(AppTheme.dark.title, "Goku Dark")
         XCTAssertEqual(AppTheme.chatgpt.title, "ChatGPT")
         XCTAssertEqual(AppTheme.midnight.title, "Midnight")
         XCTAssertEqual(AppTheme.forest.title, "Forest")
         XCTAssertEqual(AppTheme.sand.title, "Sand")
         XCTAssertEqual(AppTheme.system.palette, .semreh)
-        XCTAssertEqual(AppTheme.light.palette, .semreh)
-        XCTAssertEqual(AppTheme.dark.palette, .semreh)
+        XCTAssertEqual(AppTheme.light.palette, .goku)
+        XCTAssertEqual(AppTheme.dark.palette, .goku)
         XCTAssertEqual(AppTheme.chatgpt.palette, .chatgpt)
         XCTAssertEqual(AppTheme.midnight.palette, .midnight)
         XCTAssertEqual(AppTheme.forest.palette, .forest)
@@ -88,19 +90,24 @@ final class AppThemeTests: XCTestCase {
         )
     }
 
-    func testSemrehVisualThemeUsesCanonicalPalette() {
-        XCTAssertEqual(SemrehVisualTheme.giOrangeHex, "#F47A21")
-        XCTAssertEqual(SemrehVisualTheme.royalBlueHex, "#2166F3")
-        XCTAssertEqual(SemrehVisualTheme.energyGoldHex, "#FFD54A")
-        XCTAssertEqual(SemrehVisualTheme.deepNavyHex, "#071426")
-        XCTAssertEqual(SemrehVisualTheme.skyBlueHex, "#73D5FF")
-        XCTAssertEqual(SemrehVisualTheme.brandAction, SemrehVisualTheme.giOrange)
-        XCTAssertEqual(SemrehVisualTheme.energy, SemrehVisualTheme.energyGold)
+    func testSemrehVisualThemeUsesCanonicalLogoPalette() {
+        XCTAssertEqual(SemrehVisualTheme.logoNavyHex, "#032357")
+        XCTAssertEqual(SemrehVisualTheme.logoTealHex, "#12C7B5")
+        XCTAssertEqual(SemrehVisualTheme.logoAquaHex, "#31D8CA")
+        XCTAssertEqual(SemrehVisualTheme.deepNavyHex, SemrehVisualTheme.logoNavyHex)
+        XCTAssertEqual(SemrehVisualTheme.brandAction, SemrehVisualTheme.logoTeal)
+        XCTAssertEqual(SemrehVisualTheme.energy, SemrehVisualTheme.logoTeal)
+    }
+
+    func testGokuPaletteRetainsLegacyVisualTokens() {
+        XCTAssertEqual(SemrehVisualTheme.tokens(for: .goku).brandActionHex, "#F47A21")
+        XCTAssertEqual(SemrehVisualTheme.tokens(for: .goku).energyHex, "#FFD54A")
+        XCTAssertEqual(SemrehVisualTheme.tokens(for: .goku).canvasDarkHex, "#071426")
     }
 
     func testSemrehVisualThemeActionAdaptsForDarkModeContrast() {
-        XCTAssertEqual(SemrehVisualTheme.actionHex(for: .light), SemrehVisualTheme.royalBlueHex)
-        XCTAssertEqual(SemrehVisualTheme.actionHex(for: .dark), SemrehVisualTheme.skyBlueHex)
+        XCTAssertEqual(SemrehVisualTheme.actionHex(for: .light), "#006A72")
+        XCTAssertEqual(SemrehVisualTheme.actionHex(for: .dark), "#31D8CA")
 
         for scheme in [ColorScheme.light, .dark] {
             XCTAssertGreaterThanOrEqual(
@@ -115,7 +122,7 @@ final class AppThemeTests: XCTestCase {
 
     func testSemrehVisualThemeUsesReadableAccentForegrounds() {
         XCTAssertEqual(SemrehVisualTheme.accentForegroundHex(for: .light), "#FFFFFF")
-        XCTAssertEqual(SemrehVisualTheme.accentForegroundHex(for: .dark), SemrehVisualTheme.deepNavyHex)
+        XCTAssertEqual(SemrehVisualTheme.accentForegroundHex(for: .dark), SemrehVisualTheme.logoNavyHex)
 
         for scheme in [ColorScheme.light, .dark] {
             XCTAssertGreaterThanOrEqual(
@@ -155,15 +162,15 @@ final class AppThemeTests: XCTestCase {
         XCTAssertGreaterThan(
             SemrehVisualTheme.contrastRatio(
                 foregroundHex: SemrehVisualTheme.primaryActionForegroundHex,
-                backgroundHex: SemrehVisualTheme.energyGoldHex
+                backgroundHex: SemrehVisualTheme.logoTealHex
             ),
             4.5
         )
     }
 
     func testSemrehVisualThemeCanvasAdaptsToColorScheme() {
-        XCTAssertEqual(SemrehVisualTheme.canvasHex(for: .light), "#FFF8EE")
-        XCTAssertEqual(SemrehVisualTheme.canvasHex(for: .dark), "#071426")
+        XCTAssertEqual(SemrehVisualTheme.canvasHex(for: .light), "#F4F8FC")
+        XCTAssertEqual(SemrehVisualTheme.canvasHex(for: .dark), "#032357")
         XCTAssertNotEqual(SemrehVisualTheme.panelHex(for: .light), SemrehVisualTheme.panelHex(for: .dark))
     }
 
@@ -189,7 +196,7 @@ final class AppThemeTests: XCTestCase {
     func testHeaderLogoColorDisplayNameUsesPresetOrCustomFallback() {
         XCTAssertEqual(HeaderLogoColor.displayName(for: "#FFD700"), "Yellow")
         XCTAssertEqual(HeaderLogoColor.displayName(for: "#123456"), "Custom")
-        XCTAssertEqual(HeaderLogoColor.displayName(for: "not-a-color"), "Yellow")
+        XCTAssertEqual(HeaderLogoColor.displayName(for: "not-a-color"), "Teal")
     }
 
     func testHeaderLogoColorFormatsRGBComponentsAsHex() {

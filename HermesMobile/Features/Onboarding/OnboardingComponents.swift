@@ -1,18 +1,75 @@
 import SwiftUI
 import UIKit
 
+enum OnboardingTheme {
+    static func primaryText(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? .white : SemrehVisualTheme.logoNavy
+    }
+
+    static func secondaryText(for colorScheme: ColorScheme) -> Color {
+        primaryText(for: colorScheme).opacity(colorScheme == .dark ? 0.62 : 0.64)
+    }
+
+    static func tertiaryText(for colorScheme: ColorScheme) -> Color {
+        primaryText(for: colorScheme).opacity(colorScheme == .dark ? 0.42 : 0.50)
+    }
+
+    static func action(for colorScheme: ColorScheme) -> Color {
+        SemrehVisualTheme.action(for: colorScheme, palette: .semreh)
+    }
+
+    static func actionForeground(for colorScheme: ColorScheme) -> Color {
+        SemrehVisualTheme.accentForeground(for: colorScheme, palette: .semreh)
+    }
+
+    static func panel(for colorScheme: ColorScheme) -> Color {
+        SemrehVisualTheme.panel(for: colorScheme, palette: .semreh)
+    }
+
+    static func border(for colorScheme: ColorScheme) -> Color {
+        SemrehVisualTheme.subtleStroke(for: colorScheme, palette: .semreh)
+    }
+}
+
+struct SemrehBrandLockup: View {
+    var width: CGFloat = 246
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image("SemrehWing")
+                .resizable()
+                .scaledToFit()
+                .frame(width: width * 0.62)
+
+            Image("SemrehWordmark")
+                .resizable()
+                .scaledToFit()
+                .frame(width: width)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Semreh")
+        .accessibilityAddTraits(.isImage)
+    }
+}
+
 struct HeroBadge: View {
     let systemImage: String
     let title: String
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Label(title, systemImage: systemImage)
             .font(.caption.weight(.medium))
-            .foregroundStyle(.white.opacity(0.68))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(Color.white.opacity(0.06), in: Capsule())
-            .overlay(Capsule().stroke(Color.white.opacity(0.08), lineWidth: 1))
+            .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme))
+            .padding(.horizontal, 11)
+            .padding(.vertical, 8)
+            .background(
+                OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.68 : 0.82),
+                in: Capsule()
+            )
+            .overlay(
+                Capsule().stroke(OnboardingTheme.border(for: colorScheme).opacity(0.65), lineWidth: 1)
+            )
     }
 }
 
@@ -23,24 +80,25 @@ struct SetupStepRow: View {
     var command: String?
     var commandPrefix: String? = "$"
     var copyValue: String?
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Text(number)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(.black)
-                .frame(width: 23, height: 23)
-                .background(Color(red: 1.0, green: 0.74, blue: 0.10), in: Circle())
+                .foregroundStyle(OnboardingTheme.actionForeground(for: colorScheme))
+                .frame(width: 26, height: 26)
+                .background(OnboardingTheme.action(for: colorScheme), in: Circle())
                 .padding(.top, 1)
 
             VStack(alignment: .leading, spacing: 7) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme))
 
                 Text(subtitle)
                     .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme))
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let command {
@@ -56,17 +114,18 @@ struct OnboardingCommandPill: View {
     var prefix: String? = "$"
     var copyValue: String?
     @State private var didCopy = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: 10) {
             HStack(spacing: 0) {
                 if let prefix {
                     Text("\(prefix) ")
-                        .foregroundStyle(.white.opacity(0.28))
+                        .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme).opacity(0.72))
                 }
 
                 Text(text)
-                    .foregroundStyle(.white.opacity(0.78))
+                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme).opacity(0.86))
                     .lineLimit(1)
                     .minimumScaleFactor(0.62)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -79,24 +138,35 @@ struct OnboardingCommandPill: View {
                 } label: {
                     Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(didCopy ? Color(red: 0.45, green: 0.92, blue: 0.56) : .white.opacity(0.76))
-                        .frame(width: 28, height: 28)
-                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .foregroundStyle(
+                            didCopy
+                                ? Color.green
+                                : OnboardingTheme.primaryText(for: colorScheme).opacity(0.76)
+                        )
+                        .frame(width: 30, height: 30)
+                        .background(
+                            OnboardingTheme.action(for: colorScheme).opacity(0.10),
+                            in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(didCopy ? String(localized: "Copied Web UI repository link") : String(localized: "Copy Web UI repository link"))
+                .accessibilityLabel(
+                    didCopy
+                        ? String(localized: "Copied Web UI repository link")
+                        : String(localized: "Copy Web UI repository link")
+                )
             }
         }
         .font(.system(.caption, design: .monospaced, weight: .medium))
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.055))
+            OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.72 : 0.88),
+            in: RoundedRectangle(cornerRadius: 11, style: .continuous)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .stroke(OnboardingTheme.border(for: colorScheme).opacity(0.72), lineWidth: 1)
         )
     }
 }
@@ -105,30 +175,34 @@ struct OnboardingField<Content: View>: View {
     let systemImage: String
     let title: String
     @ViewBuilder let content: Content
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color(red: 1.0, green: 0.74, blue: 0.10))
+                .foregroundStyle(OnboardingTheme.action(for: colorScheme))
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme))
 
                 content
                     .font(.body.weight(.medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme))
             }
         }
-        .padding(.horizontal, 13)
-        .padding(.vertical, 12)
-        .background(Color.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(.horizontal, 15)
+        .padding(.vertical, 13)
+        .background(
+            OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.74 : 0.92),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(OnboardingTheme.border(for: colorScheme).opacity(0.70), lineWidth: 1)
         )
     }
 }
@@ -138,6 +212,7 @@ struct OnboardingStatusBanner: View {
     let systemImage: String
     let tint: Color
     var showsProgress = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -153,31 +228,33 @@ struct OnboardingStatusBanner: View {
 
             Text(text)
                 .font(.footnote.weight(.medium))
-                .foregroundStyle(.white.opacity(0.76))
+                .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme).opacity(0.82))
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 11)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(tint.opacity(colorScheme == .dark ? 0.14 : 0.10), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(tint.opacity(0.18), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(tint.opacity(0.24), lineWidth: 1)
         )
     }
 }
 
 struct OnboardingPrimaryButtonStyle: ButtonStyle {
+    @Environment(\.colorScheme) private var colorScheme
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.black)
+            .foregroundStyle(OnboardingTheme.actionForeground(for: colorScheme))
             .lineLimit(1)
             .minimumScaleFactor(0.78)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 10)
             .padding(.vertical, 15)
-            .background(Color(red: 1.0, green: 0.74, blue: 0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(OnboardingTheme.action(for: colorScheme), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
             .opacity(configuration.isPressed ? 0.78 : 1)
     }
 }
@@ -187,40 +264,39 @@ struct OnboardingStepHeader: View {
     let icon: String
     let title: String
     let description: String
-
-    private let accent = Color(red: 1.0, green: 0.74, blue: 0.10)
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 18) {
             Image(systemName: icon)
-                .font(.system(size: 30, weight: .light))
-                .foregroundStyle(.white)
-                .frame(width: 80, height: 80)
+                .font(.system(size: 28, weight: .medium))
+                .foregroundStyle(OnboardingTheme.action(for: colorScheme))
+                .frame(width: 68, height: 68)
                 .background(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(Color.white.opacity(0.06))
+                    OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.72 : 0.92),
+                    in: RoundedRectangle(cornerRadius: 20, style: .continuous)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(accent.opacity(0.35), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(OnboardingTheme.action(for: colorScheme).opacity(0.30), lineWidth: 1)
                 )
                 .accessibilityHidden(true)
 
-            VStack(spacing: 10) {
+            VStack(spacing: 9) {
                 Text("STEP \(stepNumber)")
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(accent.opacity(0.8))
+                    .foregroundStyle(OnboardingTheme.brandAccent(for: colorScheme).opacity(0.86))
                     .kerning(1.5)
 
                 Text(title)
                     .font(.system(size: 28, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(description)
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.45))
+                    .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -229,18 +305,25 @@ struct OnboardingStepHeader: View {
     }
 }
 
+private extension OnboardingTheme {
+    static func brandAccent(for colorScheme: ColorScheme) -> Color {
+        SemrehVisualTheme.brandAccent(for: colorScheme, palette: .semreh)
+    }
+}
+
 struct OnboardingAgentPromptCard: View {
     let prompt: String
     @Binding var hasCopied: Bool
     @State private var didCopyRecently = false
     @AppStorage(AppHaptics.isEnabledKey) private var isHapticsEnabled = true
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ScrollView(.vertical, showsIndicators: true) {
                 Text(prompt)
                     .font(.system(.footnote, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.82))
+                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme).opacity(0.86))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
             }
@@ -254,21 +337,28 @@ struct OnboardingAgentPromptCard: View {
                     didCopyRecently = true
                 }
             } label: {
-                Label(didCopyRecently ? String(localized: "Copied") : String(localized: "Copy prompt"), systemImage: didCopyRecently ? "checkmark" : "doc.on.doc")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
+                Label(
+                    didCopyRecently ? String(localized: "Copied") : String(localized: "Copy prompt"),
+                    systemImage: didCopyRecently ? "checkmark" : "doc.on.doc"
+                )
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity)
             }
             .buttonStyle(OnboardingPrimaryButtonStyle())
-            .accessibilityLabel(didCopyRecently ? String(localized: "Agent setup prompt copied") : String(localized: "Copy agent setup prompt"))
+            .accessibilityLabel(
+                didCopyRecently
+                    ? String(localized: "Agent setup prompt copied")
+                    : String(localized: "Copy agent setup prompt")
+            )
         }
         .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.055))
+            OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.76 : 0.94),
+            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(OnboardingTheme.border(for: colorScheme).opacity(0.78), lineWidth: 1)
         )
     }
 }
@@ -276,12 +366,17 @@ struct OnboardingAgentPromptCard: View {
 struct OnboardingPageIndicator: View {
     let pageCount: Int
     let currentPage: Int
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: 8) {
             ForEach(0..<pageCount, id: \.self) { index in
                 Capsule()
-                    .fill(index == currentPage ? Color.white : Color.white.opacity(0.18))
+                    .fill(
+                        index == currentPage
+                            ? OnboardingTheme.action(for: colorScheme)
+                            : OnboardingTheme.primaryText(for: colorScheme).opacity(0.18)
+                    )
                     .frame(width: index == currentPage ? 24 : 8, height: 8)
             }
         }
@@ -292,19 +387,24 @@ struct OnboardingPageIndicator: View {
 }
 
 struct OnboardingSecondaryButtonStyle: ButtonStyle {
+    @Environment(\.colorScheme) private var colorScheme
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.white.opacity(0.84))
+            .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme).opacity(0.86))
             .lineLimit(1)
             .minimumScaleFactor(0.78)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 10)
             .padding(.vertical, 15)
-            .background(Color.white.opacity(0.065), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(
+                OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.72 : 0.90),
+                in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+            )
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(OnboardingTheme.border(for: colorScheme).opacity(0.78), lineWidth: 1)
             )
             .opacity(configuration.isPressed ? 0.72 : 1)
     }

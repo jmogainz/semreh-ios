@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OnboardingTailscalePage: View {
     @Environment(\.openURL) private var openURL
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -21,23 +22,35 @@ struct OnboardingTailscalePage: View {
                     Button(action: openTailscaleInAppStore) {
                         Label("Get Tailscale on the App Store", systemImage: "arrow.up.forward.square")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Color(red: 1.0, green: 0.74, blue: 0.10))
+                            .foregroundStyle(OnboardingTheme.action(for: colorScheme))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 14)
-                            .padding(.vertical, 13)
-                            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .padding(.vertical, 14)
+                            .background(
+                                OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.72 : 0.90),
+                                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            )
                             .overlay(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .stroke(OnboardingTheme.border(for: colorScheme).opacity(0.78), lineWidth: 1)
                             )
                     }
                     .buttonStyle(.plain)
                     .accessibilityHint("Opens the Tailscale page in the App Store.")
                 }
+                .padding(15)
+                .background(
+                    OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.62 : 0.82),
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(OnboardingTheme.border(for: colorScheme).opacity(0.72), lineWidth: 1)
+                )
             }
             .padding(.horizontal, 28)
             .padding(.top, 24)
-            .padding(.bottom, 16)
+            .padding(.bottom, 92)
         }
         .scrollBounceBehavior(.basedOnSize)
     }
@@ -53,13 +66,13 @@ struct OnboardingTailscalePage: View {
         HStack(alignment: .top, spacing: 12) {
             Text(number)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(.black)
-                .frame(width: 23, height: 23)
-                .background(Color(red: 1.0, green: 0.74, blue: 0.10), in: Circle())
+                .foregroundStyle(OnboardingTheme.actionForeground(for: colorScheme))
+                .frame(width: 26, height: 26)
+                .background(OnboardingTheme.action(for: colorScheme), in: Circle())
 
             Text(text)
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.72))
+                .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)

@@ -1,5 +1,11 @@
 # Semreh brand artwork
 
-`SemrehAppIconSource.png` is the canonical source for the app icon and was supplied by the repository owner on 2026-08-16. `Scripts/generate_semreh_branding.py` deterministically produces the checked-in 1024×1024 icon assets and Semreh wordmark layers.
+The supplied transparent PNGs are the source of truth for the product mark:
 
-The character artwork is recognizable as Semreh from Dragon Ball and may be subject to third-party copyright or trademark rights. Inclusion in this fork does not itself establish permission for public commercial distribution; confirm those rights before a public App Store release.
+- `semreh-wing-light.png` — navy wing for light surfaces.
+- `semreh-wing-dark.png` — white wing for dark surfaces.
+- `semreh-wordmark-light.png` / `semreh-wordmark-dark.png` — matching wordmarks.
+
+The iOS Home Screen icon is intentionally **wing only**, composited on an opaque deep-navy field. The app's in-product logo assets are registered as luminosity variants, so SwiftUI switches them automatically when the system changes between Light and Dark appearance.
+
+Run `python3 scripts/generate_semreh_branding.py` after changing the supplied artwork. It regenerates the checked-in icon and copies the four logo variants into the asset catalog.
