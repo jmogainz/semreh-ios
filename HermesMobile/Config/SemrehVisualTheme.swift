@@ -14,12 +14,12 @@ extension EnvironmentValues {
 /// Product-wide semantic palette. Semreh stays the default; named themes swap
 /// canvas/action/energy tokens while keeping the same roles and contrast rules.
 enum SemrehVisualTheme {
-    // Legacy Goku palette constants. These stay stable for the explicit Goku Light/Dark options.
-    static let giOrangeHex = "#F47A21"
-    static let royalBlueHex = "#2166F3"
-    static let energyGoldHex = "#FFD54A"
-    static let gokuDeepNavyHex = "#071426"
-    static let skyBlueHex = "#73D5FF"
+    // Legacy Goku palette: disciplined royal blue + warm yellow, with no orange brand token.
+    static let gokuBlueHex = "#1E4FA3"
+    static let gokuBlueDarkHex = "#6FA8FF"
+    static let gokuYellowHex = "#FFD447"
+    static let gokuYellowForegroundHex = "#241B00"
+    static let gokuDeepNavyHex = "#0B1B34"
 
     // Canonical Semreh logo colors.
     static let logoNavyHex = "#032357"
@@ -28,11 +28,11 @@ enum SemrehVisualTheme {
     static let deepNavyHex = logoNavyHex
     static let primaryActionForegroundHex = logoNavyHex
 
-    static let giOrange = Color(hexRGB: giOrangeHex)!
-    static let royalBlue = Color(hexRGB: royalBlueHex)!
-    static let energyGold = Color(hexRGB: energyGoldHex)!
+    static let gokuBlue = Color(hexRGB: gokuBlueHex)!
+    static let gokuBlueDark = Color(hexRGB: gokuBlueDarkHex)!
+    static let gokuYellow = Color(hexRGB: gokuYellowHex)!
+    static let gokuDeepNavy = Color(hexRGB: gokuDeepNavyHex)!
     static let deepNavy = Color(hexRGB: deepNavyHex)!
-    static let skyBlue = Color(hexRGB: skyBlueHex)!
     static let logoNavy = Color(hexRGB: logoNavyHex)!
     static let logoTeal = Color(hexRGB: logoTealHex)!
     static let logoAqua = Color(hexRGB: logoAquaHex)!
@@ -102,6 +102,120 @@ enum SemrehVisualTheme {
 
     static func brandActionColor(for palette: AppColorPalette = .semreh) -> Color {
         Color(hexRGB: tokens(for: palette).brandActionHex)!
+    }
+
+    /// User/prompt bubbles are intentionally a separate semantic role from the
+    /// app chrome: a restrained blue surface with a high-contrast accent label.
+    static func promptBubbleBackgroundHex(
+        for colorScheme: ColorScheme,
+        palette: AppColorPalette = .semreh
+    ) -> String {
+        switch palette {
+        case .goku, .semreh:
+            colorScheme == .dark ? "#2FE099" : "#39E89A"
+        case .chatgpt:
+            colorScheme == .dark ? "#2DD4A0" : "#43D39E"
+        case .midnight:
+            colorScheme == .dark ? "#73E8C0" : "#8BE8C7"
+        case .forest:
+            colorScheme == .dark ? "#6ED39A" : "#8BE0A5"
+        case .sand:
+            colorScheme == .dark ? "#8FD6A4" : "#A8E6B8"
+        }
+    }
+
+    static func promptBubbleForegroundHex(
+        for palette: AppColorPalette = .semreh
+    ) -> String {
+        switch palette {
+        case .goku:
+            gokuDeepNavyHex
+        case .semreh:
+            logoNavyHex
+        case .chatgpt:
+            "#06281F"
+        case .midnight:
+            "#151B3D"
+        case .forest:
+            "#102016"
+        case .sand:
+            "#1B2A20"
+        }
+    }
+
+    static func promptBubbleBorderHex(
+        for colorScheme: ColorScheme,
+        palette: AppColorPalette = .semreh
+    ) -> String {
+        switch palette {
+        case .goku:
+            colorScheme == .dark ? gokuBlueDarkHex : "#5F8FE8"
+        case .semreh:
+            logoAquaHex
+        case .chatgpt:
+            colorScheme == .dark ? "#62D9B4" : "#19C37D"
+        case .midnight:
+            colorScheme == .dark ? "#A5B4FF" : "#7C8CFF"
+        case .forest:
+            colorScheme == .dark ? "#6ED39A" : "#4FAE73"
+        case .sand:
+            colorScheme == .dark ? "#E8A07A" : "#C96442"
+        }
+    }
+
+    static func promptBubbleBackground(
+        for colorScheme: ColorScheme,
+        palette: AppColorPalette = .semreh
+    ) -> Color {
+        Color(hexRGB: promptBubbleBackgroundHex(for: colorScheme, palette: palette))!
+    }
+
+    static func promptBubbleForeground(for palette: AppColorPalette = .semreh) -> Color {
+        Color(hexRGB: promptBubbleForegroundHex(for: palette))!
+    }
+
+    static func promptBubbleBorder(
+        for colorScheme: ColorScheme,
+        palette: AppColorPalette = .semreh
+    ) -> Color {
+        Color(hexRGB: promptBubbleBorderHex(for: colorScheme, palette: palette))!
+    }
+
+    static func statusPositive(for palette: AppColorPalette = .semreh) -> Color {
+        switch palette {
+        case .goku: Color(hexRGB: "#65D7A4")!
+        case .semreh: Color(hexRGB: "#4FD6A1")!
+        case .chatgpt: Color(hexRGB: "#4ADE80")!
+        case .midnight: Color(hexRGB: "#A5B4FF")!
+        case .forest: Color(hexRGB: "#7BC67E")!
+        case .sand: Color(hexRGB: "#E0B07A")!
+        }
+    }
+
+    static func statusWarning(for palette: AppColorPalette = .semreh) -> Color {
+        switch palette {
+        case .goku: gokuYellow
+        case .semreh: Color(hexRGB: "#E6C45A")!
+        case .chatgpt: Color(hexRGB: "#E7C56A")!
+        case .midnight: Color(hexRGB: "#C4B5FD")!
+        case .forest: Color(hexRGB: "#C6D77A")!
+        case .sand: Color(hexRGB: "#E8A07A")!
+        }
+    }
+
+    static func statusCritical(for palette: AppColorPalette = .semreh) -> Color {
+        switch palette {
+        case .goku: Color(hexRGB: "#FF8A8A")!
+        case .semreh: Color(hexRGB: "#E87980")!
+        case .chatgpt: Color(hexRGB: "#F28B82")!
+        case .midnight: Color(hexRGB: "#FF9A9A")!
+        case .forest: Color(hexRGB: "#E98B8B")!
+        case .sand: Color(hexRGB: "#D96C75")!
+        }
+    }
+
+    static func statusInfo(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> Color {
+        action(for: colorScheme, palette: palette)
     }
 
     static func chromeSurfaceOpacity(reduceTransparency: Bool) -> Double {
@@ -198,24 +312,24 @@ enum SemrehVisualTheme {
         switch palette {
         case .goku:
             VisualThemeTokens(
-                brandActionHex: giOrangeHex,
-                energyHex: energyGoldHex,
-                energyForegroundHex: gokuDeepNavyHex,
-                actionLightHex: royalBlueHex,
-                actionDarkHex: skyBlueHex,
-                canvasLightHex: "#FFF8EE",
+                brandActionHex: gokuYellowHex,
+                energyHex: gokuYellowHex,
+                energyForegroundHex: gokuYellowForegroundHex,
+                actionLightHex: gokuBlueHex,
+                actionDarkHex: gokuBlueDarkHex,
+                canvasLightHex: "#F4F7FC",
                 canvasDarkHex: gokuDeepNavyHex,
                 panelLightHex: "#FFFFFF",
-                panelDarkHex: "#102A4C",
-                raisedLightHex: "#FFFDF9",
-                raisedDarkHex: "#16365E",
-                brandAccentLightHex: "#9A3F00",
-                brandAccentDarkHex: "#FFB21C",
+                panelDarkHex: "#122C50",
+                raisedLightHex: "#FBFDFF",
+                raisedDarkHex: "#193A66",
+                brandAccentLightHex: "#785800",
+                brandAccentDarkHex: "#FFE08A",
                 accentForegroundLightHex: "#FFFFFF",
                 accentForegroundDarkHex: gokuDeepNavyHex,
-                backdropMidLightHex: "#F3F7FF",
-                backdropMidDarkHex: "#0B2342",
-                gradientMidHex: skyBlueHex
+                backdropMidLightHex: "#E8F0FF",
+                backdropMidDarkHex: "#0E2546",
+                gradientMidHex: "#3F76D6",
             )
         case .semreh:
             VisualThemeTokens(
@@ -224,19 +338,19 @@ enum SemrehVisualTheme {
                 energyForegroundHex: logoNavyHex,
                 actionLightHex: "#006A72",
                 actionDarkHex: logoAquaHex,
-                canvasLightHex: "#F4F8FC",
-                canvasDarkHex: logoNavyHex,
+                canvasLightHex: "#F5F8FC",
+                canvasDarkHex: "#0B1B2E",
                 panelLightHex: "#FFFFFF",
-                panelDarkHex: "#0A2E5B",
-                raisedLightHex: "#F8FBFD",
-                raisedDarkHex: "#104276",
+                panelDarkHex: "#122B45",
+                raisedLightHex: "#FBFDFF",
+                raisedDarkHex: "#193A5A",
                 brandAccentLightHex: "#005E64",
                 brandAccentDarkHex: logoAquaHex,
                 accentForegroundLightHex: "#FFFFFF",
                 accentForegroundDarkHex: logoNavyHex,
-                backdropMidLightHex: "#E7F3F4",
-                backdropMidDarkHex: "#062B55",
-                gradientMidHex: logoAquaHex
+                backdropMidLightHex: "#E9F4F5",
+                backdropMidDarkHex: "#0E253B",
+                gradientMidHex: logoAquaHex,
             )
         case .chatgpt:
             VisualThemeTokens(

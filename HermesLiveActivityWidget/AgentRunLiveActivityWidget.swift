@@ -347,42 +347,37 @@ private struct AgentRunElapsedTimerText: View {
 }
 
 private enum AgentRunLiveActivityTheme {
-    static let background = Color(red: 0.025, green: 0.028, blue: 0.038)
-    static let primaryText = Color.white
-    static let secondaryText = Color.white.opacity(0.68)
-    static let stroke = Color.white.opacity(0.13)
-    static let pillBackground = Color.white.opacity(0.08)
-    static let railBackground = Color.white.opacity(0.14)
-    static let liveDot = Color(red: 0.35, green: 0.95, blue: 0.7)
+    // Calm Semreh surfaces; status color carries meaning, not decoration.
+    static let background = Color(red: 0.043, green: 0.090, blue: 0.145) // #0B1725
+    static let primaryText = Color(red: 0.965, green: 0.980, blue: 0.995)
+    static let secondaryText = Color(red: 0.730, green: 0.790, blue: 0.850)
+    static let stroke = Color(red: 0.620, green: 0.790, blue: 0.900).opacity(0.22)
+    static let pillBackground = Color(red: 0.090, green: 0.200, blue: 0.310)
+    static let railBackground = Color(red: 0.380, green: 0.520, blue: 0.650).opacity(0.28)
+    static let liveDot = Color(red: 0.486, green: 1.000, blue: 0.831) // #7CFFD4
 }
 
 private enum AgentRunStatusStyle {
     static func color(for status: AgentRunActivityStatus, isStale: Bool) -> Color {
         if isStale {
-            return Color.white.opacity(0.52)
+            return AgentRunLiveActivityTheme.secondaryText.opacity(0.74)
         }
 
         switch status {
         case .starting, .thinking, .responding:
-            return Color(red: 1.0, green: 0.82, blue: 0.18)
-        case .usingTool:
-            return Color(red: 0.50, green: 0.72, blue: 1.0)
-        case .searchingFiles:
-            return Color(red: 0.22, green: 0.92, blue: 0.95)
-        case .readingFiles:
-            return Color(red: 0.58, green: 0.78, blue: 1.0)
-        case .runningCommand:
-            return Color(red: 0.76, green: 0.55, blue: 1.0)
-        case .waitingForApproval:
-            return Color(red: 1.0, green: 0.58, blue: 0.24)
-        case .waitingForClarification:
-            return Color(red: 1.0, green: 0.65, blue: 0.30)
+            return Color(red: 1.000, green: 0.831, blue: 0.278) // #FFD447
+        case .usingTool, .readingFiles:
+            return Color(red: 0.435, green: 0.659, blue: 1.000) // #6FA8FF
+        case .searchingFiles, .runningCommand:
+            return Color(red: 0.486, green: 1.000, blue: 0.831) // #7CFFD4
+        case .waitingForApproval, .waitingForClarification:
+            return Color(red: 0.902, green: 0.769, blue: 0.353) // #E6C45A
         case .complete:
-            return Color(red: 0.35, green: 0.95, blue: 0.55)
+            return Color(red: 0.310, green: 0.839, blue: 0.631) // #4FD6A1
         case .failed:
-            return Color(red: 1.0, green: 0.32, blue: 0.32)
+            return Color(red: 0.910, green: 0.475, blue: 0.502) // #E87980
         case .cancelled:
-            return Color.white.opacity(0.56)
+            return AgentRunLiveActivityTheme.secondaryText.opacity(0.82)
         }
     }
 

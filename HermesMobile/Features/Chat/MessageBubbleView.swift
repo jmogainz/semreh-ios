@@ -5,17 +5,15 @@ struct MessageBubbleView: View {
     @Environment(\.appColorPalette) private var palette
 
     private var userBubbleBackground: Color {
-        SemrehVisualTheme.action(for: colorScheme, palette: palette)
+        SemrehVisualTheme.promptBubbleBackground(for: colorScheme, palette: palette)
     }
 
     private var userBubbleForeground: Color {
-        SemrehVisualTheme.accentForeground(for: colorScheme, palette: palette)
+        SemrehVisualTheme.promptBubbleForeground(for: palette)
     }
 
     private var userBubbleBorder: Color {
-        colorScheme == .dark
-            ? SemrehVisualTheme.action(for: .dark, palette: palette).opacity(0.34)
-            : SemrehVisualTheme.canvas(for: .dark, palette: palette).opacity(0.10)
+        SemrehVisualTheme.promptBubbleBorder(for: colorScheme, palette: palette).opacity(0.82)
     }
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage(ChatTranscriptDisplaySettings.hidesAttachmentPathsKey) private var hidesAttachmentPaths = true
@@ -196,14 +194,14 @@ struct MessageBubbleView: View {
     private var localNoticeRow: some View {
         localStatusRow(
             iconName: "checkmark.circle.fill",
-            iconColor: .green
+            iconColor: SemrehVisualTheme.statusPositive(for: palette)
         )
     }
 
     private var localAssistantRow: some View {
         localStatusRow(
             iconName: "command.circle.fill",
-            iconColor: .accentColor
+            iconColor: SemrehVisualTheme.statusInfo(for: colorScheme, palette: palette)
         )
     }
 

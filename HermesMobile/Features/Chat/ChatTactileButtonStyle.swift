@@ -311,6 +311,7 @@ struct ChatDecisionButtonStyle: ButtonStyle {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
@@ -339,11 +340,11 @@ struct ChatDecisionButtonStyle: ButtonStyle {
 
         switch emphasis {
         case .primary:
-            return colorScheme == .dark ? .black : .white
+            return SemrehVisualTheme.accentForeground(for: colorScheme, palette: palette)
         case .secondary:
-            return .primary
+            return SemrehVisualTheme.brandAccent(for: colorScheme, palette: palette)
         case .destructive:
-            return .red
+            return SemrehVisualTheme.statusCritical(for: palette)
         }
     }
 
@@ -354,11 +355,11 @@ struct ChatDecisionButtonStyle: ButtonStyle {
 
         switch emphasis {
         case .primary:
-            return colorScheme == .dark ? .white : .black
+            return SemrehVisualTheme.action(for: colorScheme, palette: palette)
         case .secondary:
-            return colorScheme == .dark ? Color.white.opacity(isPressed ? 0.12 : 0.08) : Color.black.opacity(isPressed ? 0.07 : 0.045)
+            return SemrehVisualTheme.panel(for: colorScheme, palette: palette).opacity(isPressed ? 0.72 : 0.56)
         case .destructive:
-            return Color.red.opacity(isPressed ? 0.16 : 0.10)
+            return SemrehVisualTheme.statusCritical(for: palette).opacity(isPressed ? 0.18 : 0.10)
         }
     }
 
@@ -367,9 +368,9 @@ struct ChatDecisionButtonStyle: ButtonStyle {
         case .primary:
             return .clear
         case .secondary:
-            return Color(.separator).opacity(colorScheme == .dark ? 0.36 : 0.24)
+            return SemrehVisualTheme.subtleStroke(for: colorScheme, palette: palette)
         case .destructive:
-            return Color.red.opacity(colorScheme == .dark ? 0.36 : 0.26)
+            return SemrehVisualTheme.statusCritical(for: palette).opacity(colorScheme == .dark ? 0.42 : 0.30)
         }
     }
 
