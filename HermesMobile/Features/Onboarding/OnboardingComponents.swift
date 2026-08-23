@@ -2,32 +2,34 @@ import SwiftUI
 import UIKit
 
 enum OnboardingTheme {
-    static func primaryText(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark ? .white : SemrehVisualTheme.logoNavy
+    static func primaryText(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> Color {
+        colorScheme == .dark
+            ? .white
+            : Color(hexRGB: SemrehVisualTheme.tokens(for: palette).canvasDarkHex)!
     }
 
-    static func secondaryText(for colorScheme: ColorScheme) -> Color {
-        primaryText(for: colorScheme).opacity(colorScheme == .dark ? 0.62 : 0.64)
+    static func secondaryText(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> Color {
+        primaryText(for: colorScheme, palette: palette).opacity(colorScheme == .dark ? 0.62 : 0.64)
     }
 
-    static func tertiaryText(for colorScheme: ColorScheme) -> Color {
-        primaryText(for: colorScheme).opacity(colorScheme == .dark ? 0.42 : 0.50)
+    static func tertiaryText(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> Color {
+        primaryText(for: colorScheme, palette: palette).opacity(colorScheme == .dark ? 0.42 : 0.50)
     }
 
-    static func action(for colorScheme: ColorScheme) -> Color {
-        SemrehVisualTheme.action(for: colorScheme, palette: .semreh)
+    static func action(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> Color {
+        SemrehVisualTheme.action(for: colorScheme, palette: palette)
     }
 
-    static func actionForeground(for colorScheme: ColorScheme) -> Color {
-        SemrehVisualTheme.accentForeground(for: colorScheme, palette: .semreh)
+    static func actionForeground(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> Color {
+        SemrehVisualTheme.accentForeground(for: colorScheme, palette: palette)
     }
 
-    static func panel(for colorScheme: ColorScheme) -> Color {
-        SemrehVisualTheme.panel(for: colorScheme, palette: .semreh)
+    static func panel(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> Color {
+        SemrehVisualTheme.panel(for: colorScheme, palette: palette)
     }
 
-    static func border(for colorScheme: ColorScheme) -> Color {
-        SemrehVisualTheme.subtleStroke(for: colorScheme, palette: .semreh)
+    static func border(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> Color {
+        SemrehVisualTheme.subtleStroke(for: colorScheme, palette: palette)
     }
 }
 
@@ -56,19 +58,20 @@ struct HeroBadge: View {
     let systemImage: String
     let title: String
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
 
     var body: some View {
         Label(title, systemImage: systemImage)
             .font(.caption.weight(.medium))
-            .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme))
+            .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme, palette: palette))
             .padding(.horizontal, 11)
             .padding(.vertical, 8)
             .background(
-                OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.68 : 0.82),
+                OnboardingTheme.panel(for: colorScheme, palette: palette).opacity(colorScheme == .dark ? 0.68 : 0.82),
                 in: Capsule()
             )
             .overlay(
-                Capsule().stroke(OnboardingTheme.border(for: colorScheme).opacity(0.65), lineWidth: 1)
+                Capsule().stroke(OnboardingTheme.border(for: colorScheme, palette: palette).opacity(0.65), lineWidth: 1)
             )
     }
 }
@@ -81,24 +84,25 @@ struct SetupStepRow: View {
     var commandPrefix: String? = "$"
     var copyValue: String?
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Text(number)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(OnboardingTheme.actionForeground(for: colorScheme))
+                .foregroundStyle(OnboardingTheme.actionForeground(for: colorScheme, palette: palette))
                 .frame(width: 26, height: 26)
-                .background(OnboardingTheme.action(for: colorScheme), in: Circle())
+                .background(OnboardingTheme.action(for: colorScheme, palette: palette), in: Circle())
                 .padding(.top, 1)
 
             VStack(alignment: .leading, spacing: 7) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme))
+                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme, palette: palette))
 
                 Text(subtitle)
                     .font(.footnote)
-                    .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme))
+                    .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme, palette: palette))
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let command {
@@ -115,17 +119,18 @@ struct OnboardingCommandPill: View {
     var copyValue: String?
     @State private var didCopy = false
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
 
     var body: some View {
         HStack(spacing: 10) {
             HStack(spacing: 0) {
                 if let prefix {
                     Text("\(prefix) ")
-                        .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme).opacity(0.72))
+                        .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme, palette: palette).opacity(0.72))
                 }
 
                 Text(text)
-                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme).opacity(0.86))
+                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme, palette: palette).opacity(0.86))
                     .lineLimit(1)
                     .minimumScaleFactor(0.62)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -141,11 +146,11 @@ struct OnboardingCommandPill: View {
                         .foregroundStyle(
                             didCopy
                                 ? Color.green
-                                : OnboardingTheme.primaryText(for: colorScheme).opacity(0.76)
+                                : OnboardingTheme.primaryText(for: colorScheme, palette: palette).opacity(0.76)
                         )
                         .frame(width: 30, height: 30)
                         .background(
-                            OnboardingTheme.action(for: colorScheme).opacity(0.10),
+                            OnboardingTheme.action(for: colorScheme, palette: palette).opacity(0.10),
                             in: RoundedRectangle(cornerRadius: 9, style: .continuous)
                         )
                 }
@@ -161,12 +166,12 @@ struct OnboardingCommandPill: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .background(
-            OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.72 : 0.88),
+            OnboardingTheme.panel(for: colorScheme, palette: palette).opacity(colorScheme == .dark ? 0.72 : 0.88),
             in: RoundedRectangle(cornerRadius: 11, style: .continuous)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(OnboardingTheme.border(for: colorScheme).opacity(0.72), lineWidth: 1)
+                .stroke(OnboardingTheme.border(for: colorScheme, palette: palette).opacity(0.72), lineWidth: 1)
         )
     }
 }
@@ -176,33 +181,34 @@ struct OnboardingField<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
 
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(OnboardingTheme.action(for: colorScheme))
+                .foregroundStyle(OnboardingTheme.action(for: colorScheme, palette: palette))
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme))
+                    .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme, palette: palette))
 
                 content
                     .font(.body.weight(.medium))
-                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme))
+                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme, palette: palette))
             }
         }
         .padding(.horizontal, 15)
         .padding(.vertical, 13)
         .background(
-            OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.74 : 0.92),
+            OnboardingTheme.panel(for: colorScheme, palette: palette).opacity(colorScheme == .dark ? 0.74 : 0.92),
             in: RoundedRectangle(cornerRadius: 14, style: .continuous)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(OnboardingTheme.border(for: colorScheme).opacity(0.70), lineWidth: 1)
+                .stroke(OnboardingTheme.border(for: colorScheme, palette: palette).opacity(0.70), lineWidth: 1)
         )
     }
 }
@@ -213,6 +219,7 @@ struct OnboardingStatusBanner: View {
     let tint: Color
     var showsProgress = false
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -228,7 +235,7 @@ struct OnboardingStatusBanner: View {
 
             Text(text)
                 .font(.footnote.weight(.medium))
-                .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme).opacity(0.82))
+                .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme, palette: palette).opacity(0.82))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 13)
@@ -244,17 +251,18 @@ struct OnboardingStatusBanner: View {
 
 struct OnboardingPrimaryButtonStyle: ButtonStyle {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(OnboardingTheme.actionForeground(for: colorScheme))
+            .foregroundStyle(OnboardingTheme.actionForeground(for: colorScheme, palette: palette))
             .lineLimit(1)
             .minimumScaleFactor(0.78)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 10)
             .padding(.vertical, 15)
-            .background(OnboardingTheme.action(for: colorScheme), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .background(OnboardingTheme.action(for: colorScheme, palette: palette), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
             .opacity(configuration.isPressed ? 0.78 : 1)
     }
 }
@@ -265,38 +273,39 @@ struct OnboardingStepHeader: View {
     let title: String
     let description: String
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
 
     var body: some View {
         VStack(spacing: 18) {
             Image(systemName: icon)
                 .font(.system(size: 28, weight: .medium))
-                .foregroundStyle(OnboardingTheme.action(for: colorScheme))
+                .foregroundStyle(OnboardingTheme.action(for: colorScheme, palette: palette))
                 .frame(width: 68, height: 68)
                 .background(
-                    OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.72 : 0.92),
+                    OnboardingTheme.panel(for: colorScheme, palette: palette).opacity(colorScheme == .dark ? 0.72 : 0.92),
                     in: RoundedRectangle(cornerRadius: 20, style: .continuous)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(OnboardingTheme.action(for: colorScheme).opacity(0.30), lineWidth: 1)
+                        .stroke(OnboardingTheme.action(for: colorScheme, palette: palette).opacity(0.30), lineWidth: 1)
                 )
                 .accessibilityHidden(true)
 
             VStack(spacing: 9) {
                 Text("STEP \(stepNumber)")
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(OnboardingTheme.brandAccent(for: colorScheme).opacity(0.86))
+                    .foregroundStyle(OnboardingTheme.brandAccent(for: colorScheme, palette: palette).opacity(0.86))
                     .kerning(1.5)
 
                 Text(title)
                     .font(.system(size: 28, weight: .bold))
-                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme))
+                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme, palette: palette))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(description)
                     .font(.subheadline)
-                    .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme))
+                    .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme, palette: palette))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -306,8 +315,8 @@ struct OnboardingStepHeader: View {
 }
 
 private extension OnboardingTheme {
-    static func brandAccent(for colorScheme: ColorScheme) -> Color {
-        SemrehVisualTheme.brandAccent(for: colorScheme, palette: .semreh)
+    static func brandAccent(for colorScheme: ColorScheme, palette: AppColorPalette = .semreh) -> Color {
+        SemrehVisualTheme.brandAccent(for: colorScheme, palette: palette)
     }
 }
 
@@ -317,13 +326,14 @@ struct OnboardingAgentPromptCard: View {
     @State private var didCopyRecently = false
     @AppStorage(AppHaptics.isEnabledKey) private var isHapticsEnabled = true
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ScrollView(.vertical, showsIndicators: true) {
                 Text(prompt)
                     .font(.system(.footnote, design: .monospaced))
-                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme).opacity(0.86))
+                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme, palette: palette).opacity(0.86))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
             }
@@ -353,12 +363,12 @@ struct OnboardingAgentPromptCard: View {
         }
         .padding(16)
         .background(
-            OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.76 : 0.94),
+            OnboardingTheme.panel(for: colorScheme, palette: palette).opacity(colorScheme == .dark ? 0.76 : 0.94),
             in: RoundedRectangle(cornerRadius: 18, style: .continuous)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(OnboardingTheme.border(for: colorScheme).opacity(0.78), lineWidth: 1)
+                .stroke(OnboardingTheme.border(for: colorScheme, palette: palette).opacity(0.78), lineWidth: 1)
         )
     }
 }
@@ -367,6 +377,7 @@ struct OnboardingPageIndicator: View {
     let pageCount: Int
     let currentPage: Int
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
 
     var body: some View {
         HStack(spacing: 8) {
@@ -374,8 +385,8 @@ struct OnboardingPageIndicator: View {
                 Capsule()
                     .fill(
                         index == currentPage
-                            ? OnboardingTheme.action(for: colorScheme)
-                            : OnboardingTheme.primaryText(for: colorScheme).opacity(0.18)
+                            ? OnboardingTheme.action(for: colorScheme, palette: palette)
+                            : OnboardingTheme.primaryText(for: colorScheme, palette: palette).opacity(0.18)
                     )
                     .frame(width: index == currentPage ? 24 : 8, height: 8)
             }
@@ -388,23 +399,24 @@ struct OnboardingPageIndicator: View {
 
 struct OnboardingSecondaryButtonStyle: ButtonStyle {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme).opacity(0.86))
+            .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme, palette: palette).opacity(0.86))
             .lineLimit(1)
             .minimumScaleFactor(0.78)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 10)
             .padding(.vertical, 15)
             .background(
-                OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.72 : 0.90),
+                OnboardingTheme.panel(for: colorScheme, palette: palette).opacity(colorScheme == .dark ? 0.72 : 0.90),
                 in: RoundedRectangle(cornerRadius: 13, style: .continuous)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .stroke(OnboardingTheme.border(for: colorScheme).opacity(0.78), lineWidth: 1)
+                    .stroke(OnboardingTheme.border(for: colorScheme, palette: palette).opacity(0.78), lineWidth: 1)
             )
             .opacity(configuration.isPressed ? 0.72 : 1)
     }

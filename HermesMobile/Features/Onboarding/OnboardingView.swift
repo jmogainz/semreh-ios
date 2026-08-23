@@ -9,6 +9,7 @@ struct OnboardingView: View {
     @State private var isShowingCopyReminder = false
     @FocusState private var focusedField: OnboardingConnectField?
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
 
     init(authManager: AuthManager, savedServer: URL? = nil) {
         self.authManager = authManager
@@ -112,7 +113,7 @@ struct OnboardingView: View {
                         jumpToConnectPage()
                     }
                     .font(.footnote.weight(.medium))
-                    .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme))
+                    .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme, palette: palette))
                     .buttonStyle(.plain)
                     .accessibilityHint("Skips setup and opens the connect screen.")
                 }

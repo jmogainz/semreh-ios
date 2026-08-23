@@ -3,6 +3,7 @@ import SwiftUI
 struct OnboardingTailscalePage: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -22,17 +23,17 @@ struct OnboardingTailscalePage: View {
                     Button(action: openTailscaleInAppStore) {
                         Label("Get Tailscale on the App Store", systemImage: "arrow.up.forward.square")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(OnboardingTheme.action(for: colorScheme))
+                            .foregroundStyle(OnboardingTheme.action(for: colorScheme, palette: palette))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 14)
                             .background(
-                                OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.72 : 0.90),
+                                OnboardingTheme.panel(for: colorScheme, palette: palette).opacity(colorScheme == .dark ? 0.72 : 0.90),
                                 in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(OnboardingTheme.border(for: colorScheme).opacity(0.78), lineWidth: 1)
+                                    .stroke(OnboardingTheme.border(for: colorScheme, palette: palette).opacity(0.78), lineWidth: 1)
                             )
                     }
                     .buttonStyle(.plain)
@@ -40,12 +41,12 @@ struct OnboardingTailscalePage: View {
                 }
                 .padding(15)
                 .background(
-                    OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.62 : 0.82),
+                    OnboardingTheme.panel(for: colorScheme, palette: palette).opacity(colorScheme == .dark ? 0.62 : 0.82),
                     in: RoundedRectangle(cornerRadius: 18, style: .continuous)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(OnboardingTheme.border(for: colorScheme).opacity(0.72), lineWidth: 1)
+                        .stroke(OnboardingTheme.border(for: colorScheme, palette: palette).opacity(0.72), lineWidth: 1)
                 )
             }
             .padding(.horizontal, 28)
@@ -66,13 +67,13 @@ struct OnboardingTailscalePage: View {
         HStack(alignment: .top, spacing: 12) {
             Text(number)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(OnboardingTheme.actionForeground(for: colorScheme))
+                .foregroundStyle(OnboardingTheme.actionForeground(for: colorScheme, palette: palette))
                 .frame(width: 26, height: 26)
-                .background(OnboardingTheme.action(for: colorScheme), in: Circle())
+                .background(OnboardingTheme.action(for: colorScheme, palette: palette), in: Circle())
 
             Text(text)
                 .font(.subheadline)
-                .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme))
+                .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme, palette: palette))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)

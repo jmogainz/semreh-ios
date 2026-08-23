@@ -24,14 +24,16 @@ struct CustomHeadersEditor: View {
             removeTint: .red
         )
 
-        static let onboarding = Style(
-            primaryText: .white,
-            secondaryText: .white.opacity(0.5),
-            fieldBackground: .white.opacity(0.08),
-            fieldStroke: .white.opacity(0.14),
-            accent: Color(red: 1.0, green: 0.74, blue: 0.10),
-            removeTint: Color(red: 1.0, green: 0.5, blue: 0.4)
-        )
+        static func onboarding(for colorScheme: ColorScheme, palette: AppColorPalette) -> Style {
+            Style(
+                primaryText: OnboardingTheme.primaryText(for: colorScheme),
+                secondaryText: OnboardingTheme.tertiaryText(for: colorScheme),
+                fieldBackground: SemrehVisualTheme.panel(for: colorScheme, palette: palette).opacity(colorScheme == .dark ? 0.72 : 0.90),
+                fieldStroke: SemrehVisualTheme.subtleStroke(for: colorScheme, palette: palette).opacity(0.72),
+                accent: SemrehVisualTheme.action(for: colorScheme, palette: palette),
+                removeTint: SemrehVisualTheme.statusCritical(for: palette)
+            )
+        }
     }
 
     var body: some View {

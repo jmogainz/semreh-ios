@@ -37,6 +37,7 @@ struct ClarificationRequestCard: View {
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
     @ScaledMetric(relativeTo: .body) private var submitButtonSize: CGFloat = 40
     @State private var draftResponse = ""
 
@@ -75,7 +76,7 @@ struct ClarificationRequestCard: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Image(systemName: "questionmark.circle")
                 .font(.headline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SemrehVisualTheme.statusInfo(for: colorScheme, palette: palette))
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -98,14 +99,17 @@ struct ClarificationRequestCard: View {
     private var question: some View {
         Text(prompt.question)
             .font(.subheadline)
-            .foregroundStyle(.primary)
+            .foregroundStyle(SemrehVisualTheme.promptBubbleForeground(for: palette))
             .fixedSize(horizontal: false, vertical: true)
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(questionBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(
+                SemrehVisualTheme.promptBubbleBackground(for: colorScheme, palette: palette),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(.primary.opacity(0.06), lineWidth: 1)
+                    .stroke(SemrehVisualTheme.promptBubbleBorder(for: colorScheme, palette: palette).opacity(0.82), lineWidth: 1)
             )
     }
 
@@ -149,7 +153,7 @@ struct ClarificationRequestCard: View {
         if let errorMessage = nonEmpty(errorMessage) {
             Text(errorMessage)
                 .font(.caption)
-                .foregroundStyle(.red)
+                .foregroundStyle(SemrehVisualTheme.statusCritical(for: palette))
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -238,10 +242,6 @@ struct ClarificationRequestCard: View {
         .disabled(isResponding)
     }
 
-    private var questionBackground: Color {
-        colorScheme == .dark ? Color.white.opacity(0.07) : Color.black.opacity(0.04)
-    }
-
     private var textFieldBackground: Color {
         colorScheme == .dark ? Color.white.opacity(0.055) : Color.black.opacity(0.045)
     }
@@ -256,7 +256,7 @@ struct ClarificationRequestCard: View {
             return colorScheme == .dark ? Color.white.opacity(0.18) : Color.black.opacity(0.12)
         }
 
-        return colorScheme == .dark ? .white : .black
+        return SemrehVisualTheme.action(for: colorScheme, palette: palette)
     }
 
     private var actionButtonForeground: Color {
@@ -264,11 +264,11 @@ struct ClarificationRequestCard: View {
             return Color(.secondaryLabel)
         }
 
-        return colorScheme == .dark ? .black : .white
+        return SemrehVisualTheme.accentForeground(for: colorScheme, palette: palette)
     }
 
     private var progressFill: Color {
-        colorScheme == .dark ? Color.white.opacity(0.72) : Color.black.opacity(0.58)
+        SemrehVisualTheme.action(for: colorScheme, palette: palette)
     }
 
     private var cardTint: Color {

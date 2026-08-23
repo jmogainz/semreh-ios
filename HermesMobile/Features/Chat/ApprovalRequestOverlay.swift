@@ -8,9 +8,12 @@ struct ApprovalRequestOverlay: View {
     let onChoice: (ApprovalChoice) -> Void
     let onSkipAll: () -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
+
     var body: some View {
         ZStack {
-            Color.black.opacity(0.38)
+            Color.black.opacity(colorScheme == .dark ? 0.38 : 0.22)
                 .ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 14) {
@@ -34,7 +37,7 @@ struct ApprovalRequestOverlay: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.yellow)
+                .foregroundStyle(SemrehVisualTheme.statusWarning(for: palette))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Approval required")
@@ -60,11 +63,15 @@ struct ApprovalRequestOverlay: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     Text(command)
                         .font(.system(.footnote, design: .monospaced))
+                        .foregroundStyle(SemrehVisualTheme.promptBubbleForeground(for: palette))
                         .textSelection(.enabled)
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+                .background(
+                    SemrehVisualTheme.promptBubbleBackground(for: colorScheme, palette: palette),
+                    in: RoundedRectangle(cornerRadius: 8)
+                )
             }
 
             if !prompt.patternKeys.isEmpty {
@@ -77,9 +84,13 @@ struct ApprovalRequestOverlay: View {
                         ForEach(prompt.patternKeys, id: \.self) { key in
                             Text(key)
                                 .font(.caption2.monospaced())
+                                .foregroundStyle(SemrehVisualTheme.promptBubbleForeground(for: palette))
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 5)
-                                .background(Color(uiColor: .tertiarySystemBackground), in: Capsule())
+                                .background(
+                                    SemrehVisualTheme.promptBubbleBackground(for: colorScheme, palette: palette).opacity(0.86),
+                                    in: Capsule()
+                                )
                         }
                     }
                 }
@@ -94,7 +105,7 @@ struct ApprovalRequestOverlay: View {
             if let errorMessage = nonEmpty(errorMessage) {
                 Text(errorMessage)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(SemrehVisualTheme.statusCritical(for: palette))
             }
         }
     }

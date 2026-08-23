@@ -3,6 +3,7 @@ import SwiftUI
 struct OnboardingFeaturesPage: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
 
     private let features: [(icon: String, title: String, subtitle: String)] = [
         ("bubble.left.and.bubble.right.fill", String(localized: "Chat with Semreh from iPhone"), String(localized: "Drive conversations from anywhere on your tailnet.")),
@@ -25,11 +26,11 @@ struct OnboardingFeaturesPage: View {
                 VStack(spacing: 9) {
                     Text("What you get")
                         .font(.system(size: dynamicTypeSize.isAccessibilitySize ? 26 : 29, weight: .bold))
-                        .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme))
+                        .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme, palette: palette))
 
                     Text("Semreh, reachable from iPhone over Tailscale.")
                         .font(.subheadline)
-                        .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme))
+                        .foregroundStyle(OnboardingTheme.secondaryText(for: colorScheme, palette: palette))
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -56,27 +57,28 @@ struct OnboardingFeatureRow: View {
     let title: String
     let subtitle: String
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appColorPalette) private var palette
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(OnboardingTheme.action(for: colorScheme))
+                .foregroundStyle(OnboardingTheme.action(for: colorScheme, palette: palette))
                 .frame(width: 42, height: 42)
                 .background(
-                    OnboardingTheme.action(for: colorScheme).opacity(colorScheme == .dark ? 0.16 : 0.10),
+                    OnboardingTheme.action(for: colorScheme, palette: palette).opacity(colorScheme == .dark ? 0.16 : 0.10),
                     in: RoundedRectangle(cornerRadius: 13, style: .continuous)
                 )
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme))
+                    .foregroundStyle(OnboardingTheme.primaryText(for: colorScheme, palette: palette))
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(subtitle)
                     .font(.caption)
-                    .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme))
+                    .foregroundStyle(OnboardingTheme.tertiaryText(for: colorScheme, palette: palette))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -84,12 +86,12 @@ struct OnboardingFeatureRow: View {
         }
         .padding(14)
         .background(
-            OnboardingTheme.panel(for: colorScheme).opacity(colorScheme == .dark ? 0.70 : 0.90),
+            OnboardingTheme.panel(for: colorScheme, palette: palette).opacity(colorScheme == .dark ? 0.70 : 0.90),
             in: RoundedRectangle(cornerRadius: 17, style: .continuous)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 17, style: .continuous)
-                .stroke(OnboardingTheme.border(for: colorScheme).opacity(0.72), lineWidth: 1)
+                .stroke(OnboardingTheme.border(for: colorScheme, palette: palette).opacity(0.72), lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
     }
