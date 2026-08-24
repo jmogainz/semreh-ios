@@ -52,7 +52,6 @@ enum HermesShareDraft {
     }
 
     static let shareURLHost = "share"
-    static let maximumSharedAttachmentBytes = 20 * 1_024 * 1_024
     static let maximumSharedAttachmentCount = 10
 
     static var openURL: URL {
@@ -121,7 +120,7 @@ enum HermesShareDraft {
     ) throws {
         let trimmedDraft = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let uploadableAttachments = attachments
-            .filter { !$0.data.isEmpty && $0.data.count <= maximumSharedAttachmentBytes }
+            .filter { !$0.data.isEmpty }
             .prefix(maximumSharedAttachmentCount)
 
         guard !trimmedDraft.isEmpty || !uploadableAttachments.isEmpty else {

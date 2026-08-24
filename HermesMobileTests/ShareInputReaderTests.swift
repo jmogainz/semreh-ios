@@ -72,13 +72,14 @@ final class ShareInputReaderTests: XCTestCase {
 
     // MARK: - Attachments
 
-    func testOversizedImageDataProducesNoAttachment() async {
-        let oversized = Data(count: HermesShareDraft.maximumSharedAttachmentBytes + 1)
-        let provider = NSItemProvider(item: oversized as NSData, typeIdentifier: UTType.png.identifier)
+    func testImageDataIsNotRejectedByAClientSizeCap() async {
+        let data = Data(repeating: 0x7f, count: 1_024)
+        let provider = NSItemProvider(item: data as NSData, typeIdentifier: UTType.png.identifier)
 
         let input = await ShareInputReader.input(from: [provider])
 
-        XCTAssertTrue(input.attachments.isEmpty)
+        XCTAssertEqual(input.attachments.count, 1)
+        XCTAssertEqual(input.attachments.first?.data, data)
     }
 
     func testAttachmentsCappedAtSharedLimit() async {

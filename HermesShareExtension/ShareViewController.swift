@@ -48,7 +48,7 @@ final class ShareViewController: UIViewController {
         let draft = HermesShareDraft.draftText(textSnippets: input.textSnippets, urls: input.urls)
 
         guard !draft.isEmpty || !input.attachments.isEmpty else {
-            showStatus("Semreh accepts text, URLs, images, PDFs, and files up to 20 MB.")
+            showStatus("Semreh accepts text, URLs, images, PDFs, and files.")
             completeRequest(after: 0.8)
             return
         }

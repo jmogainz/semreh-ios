@@ -2347,10 +2347,6 @@ final class ChatViewModel {
             return false
         }
         guard !audioData.isEmpty else { return false }
-        guard audioData.count <= PendingAttachment.maximumUploadBytes else {
-            setUploadAttachmentError(PendingAttachment.uploadTooLargeMessage(filename: filename))
-            return false
-        }
         guard let sessionID else {
             setUploadAttachmentError(String(localized: "The server did not provide a session ID."))
             return false
