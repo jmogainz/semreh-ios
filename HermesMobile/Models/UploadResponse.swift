@@ -108,13 +108,6 @@ enum ImagePreviewDownsampler {
 }
 
 extension PendingAttachment {
-    static let maximumUploadBytes = 20 * 1_024 * 1_024
-    static let maximumUploadSizeDescription = "20 MB"
-
-    static func uploadTooLargeMessage(filename: String) -> String {
-        "\(filename) is too large. Attachments must be \(maximumUploadSizeDescription) or smaller."
-    }
-
     var chatReference: String {
         if isImage {
             return path.isEmpty ? name : path

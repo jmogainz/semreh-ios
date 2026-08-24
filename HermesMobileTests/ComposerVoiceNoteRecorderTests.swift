@@ -44,10 +44,8 @@ final class ComposerVoiceNoteRecorderTests: XCTestCase {
         XCTAssertEqual(ComposerVoiceNoteRecorder.maximumDuration, 300)
         XCTAssertLessThan(ComposerVoiceNoteRecorder.minimumDuration, 1)
 
-        // AAC mono at ~32 kbps over 5 minutes is roughly 1.2 MB — far below the
-        // 20 MB attachment ceiling, so the duration cap (not size) bounds the UX.
         let approxBytesAt32kbps = 32_000 / 8 * Int(ComposerVoiceNoteRecorder.maximumDuration)
-        XCTAssertLessThan(approxBytesAt32kbps, PendingAttachment.maximumUploadBytes)
+        XCTAssertGreaterThan(approxBytesAt32kbps, 0)
     }
 
     func testRecordingSettingsAreMonoAAC() {

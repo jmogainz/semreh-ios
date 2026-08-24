@@ -675,25 +675,25 @@ final class ChatViewModelSendTests: XCTestCase {
     }
 
     @MainActor
-    func testUploadAttachmentRejectsOversizedFileBeforeRequest() async throws {
+    func testUploadAttachmentDefersSizePolicyToServer() async throws {
         var didRequestUpload = false
         let viewModel = try makeViewModel { request in
             didRequestUpload = true
-            XCTFail("Oversized attachment should not reach \(request.url?.path ?? "unknown path")")
-            throw URLError(.badURL)
+            XCTAssertEqual(request.url?.path, "/api/upload")
+            return apiTestJSONResponse(
+                #"{"error":"File too large (server policy)"}"#,
+                for: request
+            )
         }
 
         await viewModel.uploadAttachment(
-            data: Data(count: PendingAttachment.maximumUploadBytes + 1),
-            filename: "too-large.mov"
+            data: Data("large payload".utf8),
+            filename: "large.mov"
         )
 
-        XCTAssertFalse(didRequestUpload)
+        XCTAssertTrue(didRequestUpload)
         XCTAssertTrue(viewModel.pendingAttachments.isEmpty)
-        XCTAssertEqual(
-            viewModel.uploadAttachmentErrorMessage,
-            "too-large.mov is too large. Attachments must be 20 MB or smaller."
-        )
+        XCTAssertEqual(viewModel.uploadAttachmentErrorMessage, "File too large (server policy)")
     }
 
     @MainActor

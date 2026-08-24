@@ -2,7 +2,18 @@ import SwiftUI
 import SwiftData
 import UIKit
 import PhotosUI
+import CoreTransferable
 import UniformTypeIdentifiers
+
+private struct ImportedPhotoVideo: Transferable {
+    let data: Data
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .movie) { received in
+            ImportedPhotoVideo(data: try Data(contentsOf: received.file))
+        }
+    }
+}
 
 private enum GitChatAlert: Identifiable {
     case confirmRemote(GitRemoteAction)
@@ -1701,12 +1712,34 @@ struct ChatView: View {
 
     private func handlePhotoSelection(_ item: PhotosPickerItem) async {
         do {
-            guard let data = try await item.loadTransferable(type: Data.self) else {
-                viewModel.setUploadAttachmentError(String(localized: "Could not read the selected photo."))
+            // Photos videos are file-backed assets. Data.self is not a reliable
+            // transferable representation for every Photos/iCloud movie, so use
+            // the file-representation API for movies and read the temporary file
+            // while Photos guarantees it is available.
+            let contentType = item.supportedContentTypes.first(where: { $0.conforms(to: .movie) })
+                ?? item.supportedContentTypes.first
+            let isVideo = contentType?.conforms(to: .movie) == true
+            let data: Data?
+            if isVideo {
+                data = try await item.loadTransferable(type: ImportedPhotoVideo.self)?.data
+            } else {
+                data = try await item.loadTransferable(type: Data.self)
+            }
+
+            guard let data else {
+                viewModel.setUploadAttachmentError(String(localized: "Could not read the selected media."))
                 return
             }
-            let filename = "image_\(Int(Date().timeIntervalSince1970))_\(UUID().uuidString.prefix(4)).jpg"
-            await viewModel.uploadAttachment(data: data, filename: filename, previewData: data)
+
+            let fileExtension = contentType?.preferredFilenameExtension ?? (isVideo ? "mov" : "jpg")
+            let prefix = isVideo ? "video" : "image"
+            let filename = "\(prefix)_\(Int(Date().timeIntervalSince1970))_\(UUID().uuidString.prefix(4)).\(fileExtension)"
+
+            await viewModel.uploadAttachment(
+                data: data,
+                filename: filename,
+                previewData: isVideo ? nil : data
+            )
         } catch {
             viewModel.setUploadAttachmentError(error.localizedDescription)
         }
@@ -1837,24 +1870,11 @@ struct ChatView: View {
             }
         }
 
-        try validateAttachmentSize(for: url)
         let data = try Data(contentsOf: url)
         let filename = url.lastPathComponent.isEmpty
             ? suggestedName ?? "pasted-file"
             : url.lastPathComponent
         return PastedFile(data: data, filename: filename)
-    }
-
-    private func validateAttachmentSize(for url: URL) throws {
-        let values = try url.resourceValues(forKeys: [.fileSizeKey])
-        guard let size = values.fileSize,
-              size > PendingAttachment.maximumUploadBytes
-        else {
-            return
-        }
-
-        let filename = url.lastPathComponent.isEmpty ? String(localized: "Selected file") : url.lastPathComponent
-        throw PastedFileError.fileTooLarge(filename: filename)
     }
 
     private func loadPastedImage(from provider: NSItemProvider) async throws -> PastedFile {
@@ -2485,7 +2505,6 @@ private struct PastedFile {
 private enum PastedFileError: LocalizedError {
     case unreadableURL
     case unreadableImage
-    case fileTooLarge(filename: String)
 
     var errorDescription: String? {
         switch self {
@@ -2493,8 +2512,6 @@ private enum PastedFileError: LocalizedError {
             String(localized: "Could not read the pasted file.")
         case .unreadableImage:
             String(localized: "Could not read the pasted image.")
-        case .fileTooLarge(let filename):
-            PendingAttachment.uploadTooLargeMessage(filename: filename)
         }
     }
 }

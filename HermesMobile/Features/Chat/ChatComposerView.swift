@@ -610,7 +610,7 @@ struct MessageComposerView: View {
         .tint(metaControlColor)
         .disabled(isConfigurationControlDisabled)
         .accessibilityLabel("Composer options")
-        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotoItems, matching: .images)
+        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotoItems, matching: .any(of: [.images, .videos]))
         .onChange(of: selectedPhotoItems) {
             let items = selectedPhotoItems
             guard !items.isEmpty else { return }

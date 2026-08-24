@@ -71,11 +71,6 @@ final class ChatAttachmentCoordinator {
             return nil
         }
 
-        guard data.count <= PendingAttachment.maximumUploadBytes else {
-            uploadAttachmentErrorMessage = PendingAttachment.uploadTooLargeMessage(filename: filename)
-            return nil
-        }
-
         guard let sessionID = delegate?.attachmentSessionID else {
             uploadAttachmentErrorMessage = String(localized: "The server did not provide a session ID.")
             return nil

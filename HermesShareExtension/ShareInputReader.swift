@@ -130,8 +130,7 @@ enum ShareInputReader {
             return nil
         }
 
-        let data = await loadData(from: provider, typeIdentifier: typeIdentifier)
-        guard let data, data.count <= HermesShareDraft.maximumSharedAttachmentBytes else {
+        guard let data = await loadData(from: provider, typeIdentifier: typeIdentifier) else {
             return nil
         }
 
@@ -150,15 +149,7 @@ enum ShareInputReader {
             }
         }
 
-        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
-           size > HermesShareDraft.maximumSharedAttachmentBytes {
-            return nil
-        }
-
         let data = try Data(contentsOf: url)
-        guard data.count <= HermesShareDraft.maximumSharedAttachmentBytes else {
-            return nil
-        }
 
         let typeIdentifier = attachmentTypeIdentifier(from: provider, fallbackURL: url)
         let filename = url.lastPathComponent.isEmpty
