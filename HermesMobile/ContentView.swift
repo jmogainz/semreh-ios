@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var pendingNewChatRequest: NewChatRequest?
     @State private var didCheckInitialPendingShare = false
     @State private var intentRouter = AppIntentRouter.shared
+    @State private var selectedSurface: AppShellSurface = .sessions
 
     var body: some View {
         content
@@ -58,16 +59,17 @@ struct ContentView: View {
         case .loggedOut(let server):
             OnboardingView(authManager: authManager, savedServer: server)
         case .loggedIn(let server):
-            SessionListView(
+            AppShellView(
                 authManager: authManager,
                 server: server,
+                selectedSurface: $selectedSurface,
                 pendingSharedImport: $pendingSharedImport,
                 pendingDeepLinkedSessionID: $pendingDeepLinkedSessionID,
-                requestedNewChat: $pendingNewChatRequest
+                pendingNewChatRequest: $pendingNewChatRequest
             )
             // Switching the active server keeps us in `.loggedIn`, so without a
-            // per-server identity SwiftUI would reuse the same SessionListView (and
-            // its server-bound view model), leaving stale sessions/chat on screen.
+            // per-server identity SwiftUI would reuse the same tab stack (and its
+            // server-bound SessionListView view model), leaving stale sessions/chat on screen.
             // Keying on the server tears the whole stack down and rebuilds it
             // against the newly active server (#17).
             .id(server)
@@ -75,6 +77,11 @@ struct ContentView: View {
     }
 
     private func handleOpenURL(_ url: URL) {
+        // Deep links and shared drafts belong to the existing Chat surface. If the
+        // user is currently looking at Teams, switch back before routing the request
+        // through the established session navigation path.
+        selectedSurface = .sessions
+
         // A fresh request each time (new `id`) so a repeat invocation re-triggers navigation
         // even if the previous one's value still lingers downstream. The voice variant carries
         // `autoStartsVoiceInput` so the composer begins dictation once it appears (#338).
