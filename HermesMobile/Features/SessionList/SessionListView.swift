@@ -298,6 +298,9 @@ struct SessionListView: View {
             }
             .onChange(of: navigationState.destination) { oldValue, newValue in
                 onConversationVisibilityChanged(navigationState.isConversationPresented)
+                if case .session(let session) = newValue {
+                    SessionReadStateStore.shared.markRead(session, server: server)
+                }
                 SessionListNewChatReturn.run(
                     from: oldValue,
                     to: newValue,
@@ -519,6 +522,7 @@ struct SessionListView: View {
 
             SessionListRowsSection(
                 viewModel: viewModel,
+                server: server,
                 sessions: sessionGroups.ordinary,
                 emptyTitle: emptySessionsTitle,
                 emptyDescription: emptySessionsDescription,

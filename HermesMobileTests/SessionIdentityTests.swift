@@ -413,3 +413,303 @@ final class SidebarSectionVisibilityTests: XCTestCase {
         XCTAssertTrue(visibility.showsAnyUtilityLink)
     }
 }
+
+final class MessagesSessionRowFormatterTests: XCTestCase {
+    func testRowStateDistinguishesStreamingPendingAndIdle() {
+        let streamingSession = SessionSummary(sessionId: "stream-1", isStreaming: true)
+        let activeStreamSession = SessionSummary(sessionId: "stream-2", activeStreamId: "stream-abc")
+        let pendingMessageSession = SessionSummary(sessionId: "pending-1", hasPendingUserMessage: true)
+        let idleSession = SessionSummary(sessionId: "idle-1", messageCount: 5, isStreaming: false)
+
+        XCTAssertEqual(MessagesSessionRowFormatter.rowState(for: streamingSession), .live)
+        XCTAssertEqual(MessagesSessionRowFormatter.rowState(for: activeStreamSession), .live)
+        XCTAssertEqual(MessagesSessionRowFormatter.rowState(for: pendingMessageSession), .live)
+        XCTAssertEqual(MessagesSessionRowFormatter.rowState(for: idleSession), .idle)
+    }
+
+    func testRowStateUsesLiveOwnerSessionIDs() {
+        let session = SessionSummary(sessionId: "live-owner-1", isStreaming: false)
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.rowState(for: session, liveOwnerSessionIDs: ["live-owner-1"]),
+            .live
+        )
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.rowState(for: session, liveOwnerSessionIDs: ["other-session"]),
+            .idle
+        )
+    }
+
+    func testRowStateBoundedFallbackLeavesUnreadAsIdleWithoutSyntheticServerFields() {
+        // Upstream Hermes server and SessionSummary model do not track per-session unread
+        // status or timestamps. An idle session safely returns .idle without synthetic unread state.
+        let session = SessionSummary(sessionId: "normal-session", messageCount: 10)
+        XCTAssertEqual(MessagesSessionRowFormatter.rowState(for: session), .idle)
+    }
+
+    func testPreviewTextPrioritizesLiveStreaming() {
+        let streamingSession = SessionSummary(
+            sessionId: "s1",
+            workspace: "/Users/maurice/workspace/goku-ios",
+            model: "claude-3-5-sonnet",
+            messageCount: 12,
+            isStreaming: true
+        )
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.previewText(for: streamingSession),
+            "Streaming response…"
+        )
+    }
+
+    func testPreviewTextPrioritizesPendingUserMessage() {
+        let pendingSession = SessionSummary(
+            sessionId: "s2",
+            workspace: "/Users/maurice/workspace/goku-ios",
+            model: "gpt-4o",
+            messageCount: 3,
+            hasPendingUserMessage: true
+        )
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.previewText(for: pendingSession),
+            "Waiting for your message…"
+        )
+    }
+
+    func testPreviewTextPrioritizesCronSubagentAndCliSessions() {
+        let cronSession = SessionSummary(
+            sessionId: "cron_daily_review",
+            workspace: "/Users/maurice/workspace/goku-ios"
+        )
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.previewText(for: cronSession),
+            "Scheduled run · goku-ios"
+        )
+
+        let cronWithoutWorkspace = SessionSummary(sessionId: "cron_plain")
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.previewText(for: cronWithoutWorkspace),
+            "Scheduled run"
+        )
+
+        let subagentSession = SessionSummary(
+            sessionId: "subagent-1",
+            workspace: "/Users/maurice/workspace/goku-ios",
+            sourceTag: "subagent"
+        )
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.previewText(for: subagentSession),
+            "Subagent run · goku-ios"
+        )
+
+        let cliSession = SessionSummary(
+            sessionId: "cli-1",
+            workspace: "/Users/maurice/workspace/goku-ios",
+            isCliSession: true
+        )
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.previewText(for: cliSession),
+            "CLI session · goku-ios"
+        )
+    }
+
+    func testPreviewTextPrioritizesActiveModelOverGenericMessageCount() {
+        let modelWithWorkspace = SessionSummary(
+            sessionId: "m1",
+            workspace: "/Users/maurice/workspace/goku-ios",
+            model: "claude-3-5-sonnet",
+            messageCount: 8
+        )
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.previewText(for: modelWithWorkspace),
+            "claude-3-5-sonnet · goku-ios"
+        )
+
+        let modelWithProfile = SessionSummary(
+            sessionId: "m2",
+            model: "gpt-4o",
+            profile: "Chabby"
+        )
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.previewText(for: modelWithProfile),
+            "gpt-4o · Chabby"
+        )
+
+        let modelOnly = SessionSummary(
+            sessionId: "m3",
+            model: "gemini-2.0-flash"
+        )
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.previewText(for: modelOnly),
+            "gemini-2.0-flash"
+        )
+    }
+
+    func testPreviewTextSecondaryMetadataFallback() {
+        let singleMessage = SessionSummary(
+            sessionId: "f1",
+            workspace: "/Users/maurice/workspace/goku-ios",
+            messageCount: 1
+        )
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.previewText(for: singleMessage),
+            "1 message · goku-ios"
+        )
+
+        let multipleMessagesWithProfile = SessionSummary(
+            sessionId: "f2",
+            workspace: "/Users/maurice/workspace/goku-ios",
+            messageCount: 5,
+            profile: "Chabby"
+        )
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.previewText(for: multipleMessagesWithProfile),
+            "5 messages · goku-ios · Chabby"
+        )
+
+        let emptySession = SessionSummary(sessionId: "f3")
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.previewText(for: emptySession, isViewingCachedData: false),
+            "Hermes session"
+        )
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.previewText(for: emptySession, isViewingCachedData: true),
+            "Cached Hermes session"
+        )
+    }
+
+    func testNormalizedWorkspaceAndProfile() {
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.normalizedWorkspace("/Users/maurice/workspace/goku-ios"),
+            "goku-ios"
+        )
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.normalizedWorkspace("   simple-name   "),
+            "simple-name"
+        )
+        XCTAssertNil(MessagesSessionRowFormatter.normalizedWorkspace("   "))
+        XCTAssertNil(MessagesSessionRowFormatter.normalizedWorkspace(nil))
+
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.normalizedProfile("  Work Profile  "),
+            "Work Profile"
+        )
+        XCTAssertNil(MessagesSessionRowFormatter.normalizedProfile("   "))
+        XCTAssertNil(MessagesSessionRowFormatter.normalizedProfile(nil))
+    }
+}
+
+final class SessionReadStateStoreTests: XCTestCase {
+    private var suiteName: String!
+    private var defaults: UserDefaults!
+    private let server = URL(string: "https://hermes.example.test")!
+
+    override func setUp() {
+        super.setUp()
+        suiteName = "SessionReadStateStoreTests-\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    override func tearDown() {
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults = nil
+        suiteName = nil
+        super.tearDown()
+    }
+
+    func testFirstObservationSeedsExistingAgentHistoryAsRead() {
+        let store = SessionReadStateStore(defaults: defaults)
+        let session = SessionSummary(
+            sessionId: "session-1",
+            messageCount: 2,
+            lastMessageAt: 100,
+            userMessageCount: 1
+        )
+
+        XCTAssertTrue(SessionReadStateStore.hasAgentReplySignal(session))
+        XCTAssertFalse(store.isUnread(for: session, server: server))
+    }
+
+    func testLaterAgentActivityBecomesUnreadAndOpeningClearsIt() {
+        let store = SessionReadStateStore(defaults: defaults)
+        let initial = SessionSummary(
+            sessionId: "session-2",
+            messageCount: 2,
+            lastMessageAt: 100,
+            userMessageCount: 1
+        )
+        let updated = SessionSummary(
+            sessionId: "session-2",
+            messageCount: 4,
+            lastMessageAt: 200,
+            userMessageCount: 2
+        )
+
+        XCTAssertFalse(store.isUnread(for: initial, server: server))
+        XCTAssertTrue(store.isUnread(for: updated, server: server))
+
+        store.markRead(updated, server: server)
+
+        XCTAssertFalse(store.isUnread(for: updated, server: server))
+    }
+
+    func testReadMarkersAreIsolatedPerServer() {
+        let store = SessionReadStateStore(defaults: defaults)
+        let initial = SessionSummary(
+            sessionId: "shared-id",
+            messageCount: 2,
+            lastMessageAt: 100,
+            userMessageCount: 1
+        )
+        let updated = SessionSummary(
+            sessionId: "shared-id",
+            messageCount: 3,
+            lastMessageAt: 200,
+            userMessageCount: 1
+        )
+        let otherServer = URL(string: "https://other-hermes.example.test")!
+
+        XCTAssertFalse(store.isUnread(for: initial, server: server))
+        XCTAssertTrue(store.isUnread(for: updated, server: server))
+        XCTAssertFalse(store.isUnread(for: updated, server: otherServer))
+    }
+
+    func testRowsDoNotClaimUnreadWithoutAgentReplyEvidence() {
+        let store = SessionReadStateStore(defaults: defaults)
+        let userOnly = SessionSummary(
+            sessionId: "user-only",
+            messageCount: 1,
+            lastMessageAt: 300,
+            userMessageCount: 1
+        )
+
+        XCTAssertFalse(SessionReadStateStore.hasAgentReplySignal(userOnly))
+        XCTAssertFalse(store.isUnread(for: userOnly, server: server))
+    }
+
+    func testLiveStateWinsOverUnreadState() {
+        let liveSession = SessionSummary(
+            sessionId: "live-and-unread",
+            messageCount: 4,
+            isStreaming: true,
+            userMessageCount: 2
+        )
+        let unreadSession = SessionSummary(
+            sessionId: "unread",
+            messageCount: 2,
+            userMessageCount: 1
+        )
+
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.rowState(for: liveSession, isUnread: true),
+            .live
+        )
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.rowState(for: unreadSession, isUnread: true),
+            .unread
+        )
+        XCTAssertEqual(
+            MessagesSessionRowFormatter.previewText(for: unreadSession, isUnread: true),
+            "New agent reply"
+        )
+    }
+}

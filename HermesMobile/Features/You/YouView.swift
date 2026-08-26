@@ -7,23 +7,32 @@ struct YouView: View {
     @AppStorage(SessionIdentitySettings.displayNameKey) private var identityDisplayName = ""
     @AppStorage(SessionIdentitySettings.initialsKey) private var identityInitials = ""
     @AppStorage(HeaderLogoColor.storageKey) private var headerLogoColorHex = HeaderLogoColor.defaultHex
+    @State private var navigationPath = NavigationPath()
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    profileCard
-                    connectionCard
-                    settingsCard
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 104)
-                .padding(.bottom, 24)
-            }
-            .scrollIndicators(.hidden)
-            .background(SemrehBackdrop().ignoresSafeArea())
-            .toolbar(.hidden, for: .navigationBar)
+        NavigationStack(path: $navigationPath) {
+            SettingsView(
+                authManager: authManager,
+                server: server,
+                header: AnyView(youHeader)
+            )
+            .toolbar(
+                navigationPath.isEmpty ? .hidden : .visible,
+                for: .navigationBar
+            )
         }
+        .background(SemrehBackdrop().ignoresSafeArea())
+    }
+
+    private var youHeader: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("You")
+                .font(.system(size: 36, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+            profileCard
+            connectionCard
+        }
+        .padding(.top, 68)
     }
 
     private var profileCard: some View {
@@ -70,42 +79,6 @@ struct YouView: View {
                 }
                 Spacer(minLength: 0)
             }
-        }
-        .padding(18)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-    }
-
-    private var settingsCard: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label("Personalize Semreh", systemImage: "slider.horizontal.3")
-                .font(.headline)
-                .padding(.bottom, 8)
-
-            NavigationLink {
-                SettingsView(authManager: authManager, server: server)
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "gearshape.fill")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 24)
-                    Text("Settings")
-                        .font(.body.weight(.medium))
-                    Spacer()
-                    Image(systemName: "chevron.forward")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .frame(minHeight: 48)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            Divider()
-                .padding(.vertical, 4)
-
-            Text("Appearance, notifications, chat behavior, servers, and identity live here.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
         .padding(18)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
