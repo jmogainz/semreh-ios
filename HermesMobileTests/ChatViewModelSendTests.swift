@@ -6047,12 +6047,13 @@ final class ChatViewModelSendTests: XCTestCase {
             case "/api/reasoning":
                 let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
                 let query = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value) })
-                XCTAssertNil(query["session_id"] ?? nil)
-                let effort = query["session_effort"] ?? nil
-                reasoningGETSessionEfforts.append(effort)
+                let sessionID = try XCTUnwrap(query["session_id"] ?? nil)
+                XCTAssertTrue(sessionID == "session-alpha" || sessionID == "session-beta")
+                reasoningGETSessionEfforts.append(sessionID)
                 return apiTestJSONResponse("""
                 {
-                  "reasoning_effort": "\(effort ?? "low")",
+                  "reasoning_effort": "\(sessionID == "session-alpha" ? "low" : "high")",
+                  "session_reasoning_effort": "\(sessionID == "session-alpha" ? "low" : "high")",
                   "supported_efforts": ["low", "high"],
                   "supports_reasoning_effort": true,
                   "session_scoped_reasoning": true
@@ -6096,7 +6097,7 @@ final class ChatViewModelSendTests: XCTestCase {
 
         XCTAssertEqual(alpha.selectedReasoningEffort, "low")
         XCTAssertEqual(beta.selectedReasoningEffort, "high")
-        XCTAssertEqual(reasoningGETSessionEfforts, ["low", "high"])
+        XCTAssertEqual(reasoningGETSessionEfforts, ["session-alpha", "session-beta"])
 
         let alphaDidSelect = await alpha.selectReasoningEffort("high")
         let betaDidSelect = await beta.selectReasoningEffort("low")
@@ -6104,7 +6105,7 @@ final class ChatViewModelSendTests: XCTestCase {
         XCTAssertTrue(betaDidSelect)
         XCTAssertEqual(reasoningPOSTs.map { $0.sessionID }, ["session-alpha", "session-beta"])
         XCTAssertEqual(reasoningPOSTs.map { $0.effort }, ["high", "low"])
-        XCTAssertEqual(reasoningGETSessionEfforts, ["low", "high", "high", "low"])
+        XCTAssertEqual(reasoningGETSessionEfforts, ["session-alpha", "session-beta", "session-alpha", "session-beta"])
     }
 
     @MainActor
@@ -6201,8 +6202,8 @@ final class ChatViewModelSendTests: XCTestCase {
         XCTAssertEqual(sessionUpdateBody?["session_id"] as? String, "session-slash")
         XCTAssertEqual(sessionUpdateBody?["reasoning_effort"] as? String, "max")
         XCTAssertNil(sessionUpdateBody?["effort"])
-        XCTAssertEqual(reasoningQuery?["session_effort"] ?? nil, "max")
-        XCTAssertNil(reasoningQuery?["session_id"] ?? nil)
+        XCTAssertEqual(reasoningQuery?["session_id"] ?? nil, "session-slash")
+        XCTAssertNil(reasoningQuery?["session_effort"] ?? nil)
         XCTAssertEqual(viewModel.selectedReasoningEffort, "max")
     }
 
@@ -6238,9 +6239,10 @@ final class ChatViewModelSendTests: XCTestCase {
             case "/api/reasoning":
                 let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
                 reasoningQuery = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value) })
-                let isCleared = (reasoningQuery?["session_effort"] ?? nil) == ""
+                XCTAssertEqual(reasoningQuery?["session_id"] ?? nil, "session-inherit")
+                let didClearOverride = sessionUpdateBody != nil
                 return apiTestJSONResponse("""
-                {"reasoning_effort":"\(isCleared ? "low" : "high")","supported_efforts":["low","high","max"],"supports_reasoning_effort":true,"session_scoped_reasoning":true}
+                {"reasoning_effort":"\(didClearOverride ? "xhigh" : "high")","session_reasoning_effort":\(didClearOverride ? "null" : "\"high\""),"supported_efforts":["low","high","xhigh"],"session_scoped_reasoning":true}
                 """, for: request)
             case "/api/workspaces":
                 return apiTestJSONResponse(#"{"workspaces":[]}"#, for: request)
@@ -6261,9 +6263,10 @@ final class ChatViewModelSendTests: XCTestCase {
         XCTAssertEqual(sessionUpdateBody?["session_id"] as? String, "session-inherit")
         XCTAssertEqual(sessionUpdateBody?["reasoning_effort"] as? String, "")
         XCTAssertNil(sessionUpdateBody?["effort"])
-        XCTAssertEqual(reasoningQuery?["session_effort"] ?? nil, "")
-        XCTAssertNil(reasoningQuery?["session_id"] ?? nil)
-        XCTAssertEqual(viewModel.selectedReasoningEffort, "low")
+        XCTAssertEqual(reasoningQuery?["session_id"] ?? nil, "session-inherit")
+        XCTAssertNil(reasoningQuery?["session_effort"] ?? nil)
+        XCTAssertEqual(viewModel.selectedReasoningEffort, "xhigh")
+        XCTAssertEqual(viewModel.selectedReasoningSelection, ReasoningEffortOption.inheritID)
         XCTAssertNil(viewModel.sessionReasoningEffort)
     }
 

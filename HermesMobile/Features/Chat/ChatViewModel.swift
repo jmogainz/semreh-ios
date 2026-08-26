@@ -1159,7 +1159,7 @@ final class ChatViewModel {
         guard let response = try? await client.reasoning(
             model: Self.nonEmpty(currentModel),
             provider: Self.nonEmpty(currentModelProvider),
-            sessionEffort: sessionReasoningEffort
+            sessionID: Self.nonEmpty(expectedSessionID)
         ) else {
             if token == reasoningGatingFetchToken,
                expectedSessionID == canonicalSessionID,
@@ -1181,7 +1181,13 @@ final class ChatViewModel {
         supportedReasoningEfforts = response.normalizedSupportedEfforts
         supportsReasoningEffort = response.supportsReasoningEffort
         sessionScopedReasoning = response.sessionScopedReasoning
-        sessionReasoningEffort = response.normalizedSessionReasoningEffort
+        if response.sessionScopedReasoning == true {
+            // The session-aware endpoint is authoritative, including a nil
+            // override after selecting Default/inherit.
+            sessionReasoningEffort = response.normalizedSessionReasoningEffort
+        } else if let rawEffort = response.normalizedSessionReasoningEffort {
+            sessionReasoningEffort = rawEffort
+        }
 
         if let selected = Self.nonEmpty(selectedReasoningEffort)?.lowercased(),
            let supported = supportedReasoningEfforts,
