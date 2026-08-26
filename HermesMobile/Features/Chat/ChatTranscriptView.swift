@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-struct ChatTranscriptView: View {
+struct ChatTranscriptView: View, Equatable {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -59,6 +59,7 @@ struct ChatTranscriptView: View {
     let onScrollToBottom: (ScrollViewProxy) -> Void
     let onScrollToLatestTranscriptMessage: (ScrollViewProxy) -> Void
     let onScrollToLatestContent: (ScrollViewProxy, Bool) -> Void
+    var onScrollToTranscriptMessage: (ScrollViewProxy, String, Bool) -> Void = { _, _, _ in }
     let onPreviewAttachment: (MessageAttachment, Data?) -> Void
     let onPreviewTranscriptMedia: (TranscriptMediaReference) -> Void
     let onToggleListening: (MessageActionContext) -> Void
@@ -80,6 +81,8 @@ struct ChatTranscriptView: View {
     var restoreScrollToken: Int = 0
     var restoreTarget: ChatTranscriptRestoreTarget = .latest
     var followRejoinScrollToken: Int = 0
+    var isComposerResizing = false
+    var transcriptRenderRevision = 0
 
     var body: some View {
         if isLoading && messages.isEmpty && clarificationPrompt == nil {
@@ -130,7 +133,8 @@ struct ChatTranscriptView: View {
                     )
                     .defaultScrollAnchor(
                         ChatScrollPolicy.sizeChangeAnchor(
-                            shouldFollowLatestMessage: shouldFollowLatestMessage
+                            shouldFollowLatestMessage: shouldFollowLatestMessage,
+                            isComposerResizing: isComposerResizing
                         ),
                         for: .sizeChanges
                     )
@@ -202,9 +206,8 @@ struct ChatTranscriptView: View {
                     onScrollToBottom(proxy)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-                    if isScrolledNearBottom {
-                        onScrollToBottom(proxy)
-                    }
+                    guard shouldFollowLatestMessage, isScrolledNearBottom else { return }
+                    onScrollToLatestContent(proxy, false)
                 }
             }
         }
@@ -327,7 +330,7 @@ struct ChatTranscriptView: View {
         case .latest:
             onScrollToLatestContent(proxy, false)
         case .message(let id):
-            proxy.scrollTo(id, anchor: .top)
+            onScrollToTranscriptMessage(proxy, id, false)
         }
     }
 
@@ -345,14 +348,7 @@ struct ChatTranscriptView: View {
         let didLoad = await onLoadOlderMessages()
         guard didLoad, let renderID else { return }
 
-        await Task.yield()
-        if reduceMotion {
-            proxy.scrollTo(renderID, anchor: .top)
-        } else {
-            withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
-                proxy.scrollTo(renderID, anchor: .top)
-            }
-        }
+        onScrollToTranscriptMessage(proxy, renderID, !reduceMotion)
     }
 
     @ViewBuilder
@@ -465,6 +461,57 @@ struct ChatTranscriptView: View {
                 ToolActivityGroupView(group: group)
             }
         }
+    }
+}
+
+extension ChatTranscriptView {
+    /// Function-valued callbacks are stable behavior supplied by `ChatView`; all
+    /// data that can change transcript output is represented by the render
+    /// revision or the small layout/interaction fields below. Keeping this
+    /// comparison explicit lets composer keystrokes avoid rebuilding every lazy
+    /// transcript row.
+    static func == (lhs: ChatTranscriptView, rhs: ChatTranscriptView) -> Bool {
+        lhs.transcriptRenderRevision == rhs.transcriptRenderRevision &&
+            lhs.isLoading == rhs.isLoading &&
+            lhs.errorMessage == rhs.errorMessage &&
+            lhs.messages.count == rhs.messages.count &&
+            lhs.messages.isEmpty == rhs.messages.isEmpty &&
+            lhs.compressionReferenceCard == rhs.compressionReferenceCard &&
+            lhs.activeStreamRecoveryState == rhs.activeStreamRecoveryState &&
+            lhs.clarificationPrompt == rhs.clarificationPrompt &&
+            lhs.isRespondingToClarification == rhs.isRespondingToClarification &&
+            lhs.clarificationErrorMessage == rhs.clarificationErrorMessage &&
+            lhs.hidesRunStatusAccessibility == rhs.hidesRunStatusAccessibility &&
+            lhs.showsThinkingAndToolCards == rhs.showsThinkingAndToolCards &&
+            lhs.showsAssistantTypingIndicator == rhs.showsAssistantTypingIndicator &&
+            lhs.showsScrollToBottomButton == rhs.showsScrollToBottomButton &&
+            lhs.shouldFollowLatestMessage == rhs.shouldFollowLatestMessage &&
+            lhs.latestTranscriptMessageRole == rhs.latestTranscriptMessageRole &&
+            lhs.liveTokensPerSecond == rhs.liveTokensPerSecond &&
+            lhs.isScrolledNearBottom == rhs.isScrolledNearBottom &&
+            lhs.activeStreamID == rhs.activeStreamID &&
+            lhs.streamingScrollTrigger == rhs.streamingScrollTrigger &&
+            lhs.cacheFirstReconcileScrollToken == rhs.cacheFirstReconcileScrollToken &&
+            lhs.bottomAnchorID == rhs.bottomAnchorID &&
+            lhs.transcriptMessageSpacing == rhs.transcriptMessageSpacing &&
+            lhs.transcriptBlockSpacing == rhs.transcriptBlockSpacing &&
+            lhs.transcriptBottomInsetHeight == rhs.transcriptBottomInsetHeight &&
+            lhs.scrollToBottomButtonBottomPadding == rhs.scrollToBottomButtonBottomPadding &&
+            lhs.localAttachmentPreviews == rhs.localAttachmentPreviews &&
+            lhs.listeningMessageID == rhs.listeningMessageID &&
+            lhs.isViewingCachedData == rhs.isViewingCachedData &&
+            lhs.hasOlderMessages == rhs.hasOlderMessages &&
+            lhs.isLoadingOlderMessages == rhs.isLoadingOlderMessages &&
+            lhs.isRegeneratingMessage == rhs.isRegeneratingMessage &&
+            lhs.isEditingMessage == rhs.isEditingMessage &&
+            lhs.isForkingMessage == rhs.isForkingMessage &&
+            lhs.transcriptMediaCacheNamespace == rhs.transcriptMediaCacheNamespace &&
+            lhs.inlineCommitContext == rhs.inlineCommitContext &&
+            lhs.turnChangesSummary == rhs.turnChangesSummary &&
+            lhs.restoreScrollToken == rhs.restoreScrollToken &&
+            lhs.restoreTarget == rhs.restoreTarget &&
+            lhs.followRejoinScrollToken == rhs.followRejoinScrollToken &&
+            lhs.isComposerResizing == rhs.isComposerResizing
     }
 }
 

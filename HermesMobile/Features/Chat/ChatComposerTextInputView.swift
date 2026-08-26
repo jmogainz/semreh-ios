@@ -96,13 +96,14 @@ private struct ComposerTextView: UIViewRepresentable {
         textView.onPasteFileURLs = onPasteFileURLs
         textView.onPasteImageProviders = onPasteImageProviders
         textView.onPasteImages = onPasteImages
-        context.coordinator.reportHeight(for: textView)
+        context.coordinator.reportHeight(for: textView, force: true)
         return textView
     }
 
     func updateUIView(_ textView: PastingTextView, context: Context) {
         context.coordinator.onHeightChange = onHeightChange
-        if textView.text != text {
+        let didChangeText = textView.text != text
+        if didChangeText {
             textView.text = text
         }
         // Mirror the chat RTL toggle onto the text view itself (#259): SwiftUI's
@@ -123,7 +124,7 @@ private struct ComposerTextView: UIViewRepresentable {
         textView.onPasteImageProviders = onPasteImageProviders
         textView.onPasteImages = onPasteImages
         context.coordinator.syncFocus(for: textView, shouldFocus: isFocused, isDisabled: isDisabled)
-        context.coordinator.reportHeight(for: textView)
+        context.coordinator.reportHeight(for: textView, force: didChangeText)
     }
 
     @MainActor
@@ -132,6 +133,9 @@ private struct ComposerTextView: UIViewRepresentable {
         @Binding var isFocused: Bool
         var onHeightChange: (CGFloat) -> Void
         private var pendingFocusTarget: Bool?
+        private var lastMeasuredText: String?
+        private var lastMeasuredWidth: CGFloat = 0
+        private var lastMeasuredFontPointSize: CGFloat = 0
 
         init(
             text: Binding<String>,
@@ -191,13 +195,27 @@ private struct ComposerTextView: UIViewRepresentable {
 
         func textViewDidChange(_ textView: UITextView) {
             text = textView.text
-            reportHeight(for: textView)
+            reportHeight(for: textView, force: true)
         }
 
-        func reportHeight(for textView: UITextView) {
+        func reportHeight(for textView: UITextView, force: Bool = false) {
             guard textView.bounds.width > 0 else { return }
 
-            let fittingSize = CGSize(width: textView.bounds.width, height: .greatestFiniteMagnitude)
+            let width = textView.bounds.width
+            let fontPointSize = textView.font?.pointSize ?? 0
+            guard force
+                || lastMeasuredText != textView.text
+                || abs(lastMeasuredWidth - width) > 0.5
+                || abs(lastMeasuredFontPointSize - fontPointSize) > 0.01
+            else {
+                return
+            }
+
+            lastMeasuredText = textView.text
+            lastMeasuredWidth = width
+            lastMeasuredFontPointSize = fontPointSize
+
+            let fittingSize = CGSize(width: width, height: .greatestFiniteMagnitude)
             let height = ceil(textView.sizeThatFits(fittingSize).height)
             onHeightChange(min(96, max(22, height)))
         }

@@ -330,6 +330,10 @@ struct ChatView: View {
     @State private var gitToastState = GitActionToastState()
     @State private var gitAlert: GitChatAlert?
     @State private var composerHeight: CGFloat = 52
+    @State private var isComposerResizing = false
+    @State private var composerResizeFollowIntent = false
+    @State private var composerResizeGeneration = 0
+    @State private var composerResizeTask: Task<Void, Never>?
     @State private var composerIsFocused = false
     @State private var didCompleteInitialAppearance = false
     @State private var isInitialComposerFocusContentReady = false
@@ -473,7 +477,7 @@ struct ChatView: View {
                 }
             },
             onHeightChange: { height in
-                composerHeight = height
+                handleComposerHeightChange(height)
             },
             onPhotoItemSelected: { item in
                 Task { await handlePhotoSelection(item) }
@@ -635,6 +639,8 @@ struct ChatView: View {
                 viewModel.setShowsLiveActivityResponseExcerpts(showsLiveActivityResponseExcerpts)
             }
             .onDisappear {
+                composerResizeTask?.cancel()
+                composerResizeTask = nil
                 persistComposerDraft()
                 persistTranscriptRestore()
                 foregroundRefreshTask?.cancel()
@@ -1190,6 +1196,9 @@ struct ChatView: View {
             onScrollToLatestContent: { proxy, animated in
                 scrollToLatestContent(proxy, animated: animated)
             },
+            onScrollToTranscriptMessage: { proxy, messageID, animated in
+                scrollToTranscriptMessage(proxy, messageID: messageID, animated: animated)
+            },
             onPreviewAttachment: { attachment, localData in
                 presentPreviewRestoringComposerFocusIfNeeded {
                     attachmentPreviewItem = ChatAttachmentPreviewItem(message: attachment, localData: localData)
@@ -1233,8 +1242,11 @@ struct ChatView: View {
             },
             restoreScrollToken: restoreScrollToken,
             restoreTarget: viewModel.transcriptRestoreTarget,
-            followRejoinScrollToken: followRejoinScrollToken
+            followRejoinScrollToken: followRejoinScrollToken,
+            isComposerResizing: isComposerResizing,
+            transcriptRenderRevision: viewModel.transcriptRenderRevision
         )
+        .equatable()
     }
 
     /// The chat-canvas layout direction. Driven by the manual Settings → Chat
@@ -1359,7 +1371,8 @@ struct ChatView: View {
     private func prepareInitialAppearance() {
         viewModel.setShowsLiveActivityResponseExcerpts(showsLiveActivityResponseExcerpts)
         guard ChatInitialAppearancePolicy.shouldReloadTranscriptOnAppear(
-            hasPreservedTranscript: viewModel.hasPreservedTranscript
+            hasPreservedTranscript: viewModel.hasPreservedTranscript,
+            wasReusedFromOpenSessionStore: viewModel.wasReusedFromOpenSessionStore
         ) else { return }
         if loadsInitialMessages {
             viewModel.prepareInitialMessageLoad(modelContext: modelContext)
@@ -1385,7 +1398,8 @@ struct ChatView: View {
 
         if loadsInitialMessages,
            ChatInitialAppearancePolicy.shouldReloadTranscriptOnAppear(
-            hasPreservedTranscript: viewModel.hasPreservedTranscript
+            hasPreservedTranscript: viewModel.hasPreservedTranscript,
+            wasReusedFromOpenSessionStore: viewModel.wasReusedFromOpenSessionStore
            ) {
             if viewModel.activeStreamID != nil {
                 // A known external run may be holding the server session lock.
@@ -2100,6 +2114,29 @@ struct ChatView: View {
         )
     }
 
+    private func scrollToTranscriptMessage(
+        _ proxy: ScrollViewProxy,
+        messageID: String,
+        animated: Bool
+    ) {
+        followScrollGeneration += 1
+        let generation = followScrollGeneration
+
+        Task { @MainActor in
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 16_000_000)
+            guard !Task.isCancelled, generation == followScrollGeneration else { return }
+
+            if animated {
+                withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
+                    proxy.scrollTo(messageID, anchor: .top)
+                }
+            } else {
+                proxy.scrollTo(messageID, anchor: .top)
+            }
+        }
+    }
+
     private func scheduleFollowScroll(
         _ proxy: ScrollViewProxy,
         targetID: String,
@@ -2216,6 +2253,36 @@ struct ChatView: View {
         )
     }
 
+    private func handleComposerHeightChange(_ height: CGFloat) {
+        guard abs(composerHeight - height) > 0.5 else { return }
+
+        if !isComposerResizing {
+            composerResizeFollowIntent = shouldFollowLatestMessage
+        }
+        composerHeight = height
+        isComposerResizing = true
+        composerResizeGeneration &+= 1
+        let generation = composerResizeGeneration
+
+        composerResizeTask?.cancel()
+        composerResizeTask = Task { @MainActor in
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            guard !Task.isCancelled, generation == composerResizeGeneration else { return }
+
+            let shouldFollow = ChatScrollPolicy.shouldFollowAfterComposerResize(
+                wasFollowingLatest: composerResizeFollowIntent && shouldFollowLatestMessage,
+                isUserInteracting: isUserInteractingWithScroll
+            )
+            composerResizeFollowIntent = false
+            composerResizeTask = nil
+            isComposerResizing = false
+
+            guard shouldFollow else { return }
+            followRejoinScrollToken += 1
+        }
+    }
+
     private func persistTranscriptRestore() {
         viewModel.rememberTranscriptRestorePoint(
             followingLatest: shouldFollowLatestMessage,
@@ -2249,6 +2316,7 @@ struct ChatView: View {
         // Touching the scroll view pauses auto-follow for a short window so
         // streaming layout growth cannot yank the viewport mid-gesture.
         if metrics.isUserInteracting {
+            followScrollGeneration += 1
             userScrollCooldownUntil = ChatScrollPolicy.cooldownDeadline()
         }
 
@@ -2289,6 +2357,7 @@ struct ChatView: View {
     private func prepareTranscriptForExplicitSend() {
         shouldFollowLatestMessage = true
         userScrollCooldownUntil = nil
+        followScrollGeneration += 1
         if isReadingOlderTranscript {
             withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
                 isReadingOlderTranscript = false

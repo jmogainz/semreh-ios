@@ -16,8 +16,22 @@ enum ChatScrollPolicy {
     /// Rich Markdown can finish measuring after the scroll view's initial
     /// layout. Keep those size changes bottom-pinned only while the app still
     /// owns follow-latest intent; return nil as soon as the reader scrolls away.
-    static func sizeChangeAnchor(shouldFollowLatestMessage: Bool) -> UnitPoint? {
-        shouldFollowLatestMessage ? .bottom : nil
+    static func sizeChangeAnchor(
+        shouldFollowLatestMessage: Bool,
+        isComposerResizing: Bool = false
+    ) -> UnitPoint? {
+        guard !isComposerResizing else { return nil }
+        return shouldFollowLatestMessage ? .bottom : nil
+    }
+
+    /// A composer resize is a viewport change, not new transcript content. Preserve
+    /// a reader's position during the resize; only re-pin a user who was already
+    /// following the latest content and is not actively dragging the transcript.
+    static func shouldFollowAfterComposerResize(
+        wasFollowingLatest: Bool,
+        isUserInteracting: Bool
+    ) -> Bool {
+        wasFollowingLatest && !isUserInteracting
     }
 
     /// Distance (pt) from the bottom within which we treat the transcript as
@@ -118,6 +132,21 @@ enum ChatInitialAppearancePolicy {
 
     static func shouldReloadTranscriptOnAppear(hasPreservedTranscript: Bool) -> Bool {
         !hasPreservedTranscript
+    }
+
+    /// A newly created view model may paint cached rows before its first
+    /// authoritative network load. Those rows are not proof that the model is
+    /// warm; only a model reused from `OpenChatSessionStore` can skip the cold
+    /// open reconciliation.
+    static func shouldReloadTranscriptOnAppear(
+        hasPreservedTranscript: Bool,
+        wasReusedFromOpenSessionStore: Bool
+    ) -> Bool {
+        if wasReusedFromOpenSessionStore {
+            return !hasPreservedTranscript
+        }
+
+        return true
     }
 }
 

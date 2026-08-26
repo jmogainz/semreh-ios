@@ -201,9 +201,14 @@ final class ChatViewModel {
     nonisolated private static let messagePageLimit = 50
     @ObservationIgnored private var incrementalTranscriptMessageIndex: Int?
     @ObservationIgnored private var messageLoadGeneration = 0
+    /// Monotonic invalidation key for transcript-rendering data. ChatView uses
+    /// this instead of comparing every message/string when unrelated composer
+    /// state changes cause the parent view to be reevaluated.
+    private(set) var transcriptRenderRevision = 0
 
     private(set) var messages: [ChatMessage] = [] {
         didSet {
+            transcriptRenderRevision &+= 1
             if let index = incrementalTranscriptMessageIndex {
                 incrementalTranscriptMessageIndex = nil
                 replaceDisplayedTranscriptMessage(at: index)
@@ -290,10 +295,15 @@ final class ChatViewModel {
     @ObservationIgnored private var pendingStreamingContentFlushTask: Task<Void, Never>?
     @ObservationIgnored private var connectionVisibilityTask: Task<Void, Never>?
     private var isConnectionVisiblySlow = false
-    private(set) var completedToolCallGroups: [ToolCallGroup] = []
+    private(set) var completedToolCallGroups: [ToolCallGroup] = [] {
+        didSet { transcriptRenderRevision &+= 1 }
+    }
     private var completedToolCallGroupLookup = ToolCallGroupAnchorLookup()
     private(set) var completedReasoningGroups: [ReasoningGroup] = [] {
-        didSet { recomputeDisplayedReasoningGroups() }
+        didSet {
+            transcriptRenderRevision &+= 1
+            recomputeDisplayedReasoningGroups()
+        }
     }
     private(set) var displayedReasoningGroups: [ReasoningGroup] = []
     private var displayedReasoningGroupLookup = ReasoningGroupAnchorLookup()
@@ -381,7 +391,9 @@ final class ChatViewModel {
     /// Synthesized "Context compaction · Reference only" card resolved from the
     /// session's `compression_anchor_*` metadata; nil when the session has no
     /// compaction metadata or the reference text is gated out.
-    private(set) var compressionReferenceCard: CompressionReferenceCard?
+    private(set) var compressionReferenceCard: CompressionReferenceCard? {
+        didSet { transcriptRenderRevision &+= 1 }
+    }
     @ObservationIgnored private var compressionAnchorMetadata: CompressionAnchorMetadata?
     private func applyCompressionAnchorMetadata(from session: SessionDetail?) {
         compressionAnchorMetadata = CompressionAnchorMetadata(from: session)
@@ -406,13 +418,26 @@ final class ChatViewModel {
 
         compressionReferenceCard = card
     }
-    private(set) var liveToolCalls: [ToolCall] = []
-    private(set) var liveReasoningText = ""
-    private(set) var streamingAssistantMessageID: String?
-    private(set) var toolCallAnchorMessageID: String?
-    private(set) var reasoningAnchorMessageID: String?
+    private(set) var liveToolCalls: [ToolCall] = [] {
+        didSet { transcriptRenderRevision &+= 1 }
+    }
+    private(set) var liveReasoningText = "" {
+        didSet { transcriptRenderRevision &+= 1 }
+    }
+    private(set) var streamingAssistantMessageID: String? {
+        didSet { transcriptRenderRevision &+= 1 }
+    }
+    private(set) var toolCallAnchorMessageID: String? {
+        didSet { transcriptRenderRevision &+= 1 }
+    }
+    private(set) var reasoningAnchorMessageID: String? {
+        didSet { transcriptRenderRevision &+= 1 }
+    }
     private(set) var messagesOffset = 0 {
-        didSet { recomputeDisplayedTranscriptMessages() }
+        didSet {
+            transcriptRenderRevision &+= 1
+            recomputeDisplayedTranscriptMessages()
+        }
     }
     private(set) var hasOlderMessages = false
     private(set) var contextWindowSnapshot: ContextWindowSnapshot?

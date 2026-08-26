@@ -12,6 +12,33 @@ final class ChatScrollPolicyTests: XCTestCase {
             .bottom
         )
         XCTAssertNil(ChatScrollPolicy.sizeChangeAnchor(shouldFollowLatestMessage: false))
+        XCTAssertNil(
+            ChatScrollPolicy.sizeChangeAnchor(
+                shouldFollowLatestMessage: true,
+                isComposerResizing: true
+            )
+        )
+    }
+
+    func testComposerResizeOnlyRejoinsLatestWhenReaderStillFollowsBottom() {
+        XCTAssertTrue(
+            ChatScrollPolicy.shouldFollowAfterComposerResize(
+                wasFollowingLatest: true,
+                isUserInteracting: false
+            )
+        )
+        XCTAssertFalse(
+            ChatScrollPolicy.shouldFollowAfterComposerResize(
+                wasFollowingLatest: false,
+                isUserInteracting: false
+            )
+        )
+        XCTAssertFalse(
+            ChatScrollPolicy.shouldFollowAfterComposerResize(
+                wasFollowingLatest: true,
+                isUserInteracting: true
+            )
+        )
     }
 
     func testInitialAsyncWorkWaitsForNavigationAppearanceCompletion() {
@@ -31,6 +58,30 @@ final class ChatScrollPolicyTests: XCTestCase {
     func testKnownStreamIDWithoutTranscriptStillReloadsHistory() {
         XCTAssertTrue(
             ChatInitialAppearancePolicy.shouldReloadTranscriptOnAppear(hasPreservedTranscript: false)
+        )
+    }
+
+    func testNewViewModelStillReconcilesAfterPaintingCachedRows() {
+        XCTAssertTrue(
+            ChatInitialAppearancePolicy.shouldReloadTranscriptOnAppear(
+                hasPreservedTranscript: true,
+                wasReusedFromOpenSessionStore: false
+            )
+        )
+    }
+
+    func testReusedWarmViewModelCanSkipColdOpenReload() {
+        XCTAssertFalse(
+            ChatInitialAppearancePolicy.shouldReloadTranscriptOnAppear(
+                hasPreservedTranscript: true,
+                wasReusedFromOpenSessionStore: true
+            )
+        )
+        XCTAssertTrue(
+            ChatInitialAppearancePolicy.shouldReloadTranscriptOnAppear(
+                hasPreservedTranscript: false,
+                wasReusedFromOpenSessionStore: true
+            )
         )
     }
 
