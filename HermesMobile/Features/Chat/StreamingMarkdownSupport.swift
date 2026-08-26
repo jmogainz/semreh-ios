@@ -96,14 +96,163 @@ enum StreamingMarkdownBlockSplitter {
         )
     }
 
-    private static func isFenceDelimiter(_ trimmedLine: String) -> Bool {
+    fileprivate static func isFenceDelimiter(_ trimmedLine: String) -> Bool {
         trimmedLine.hasPrefix("```") || trimmedLine.hasPrefix("~~~")
     }
 
-    private static func isStableSingleLineBlock(_ trimmedLine: String) -> Bool {
+    fileprivate static func isStableSingleLineBlock(_ trimmedLine: String) -> Bool {
         let headingMarkerCount = trimmedLine.prefix(while: { $0 == "#" }).count
         let isHeading = (1...6).contains(headingMarkerCount)
             && trimmedLine.dropFirst(headingMarkerCount).first?.isWhitespace == true
         return isHeading || trimmedLine == "---" || trimmedLine == "***"
+    }
+}
+
+/// Incremental counterpart to `StreamingMarkdownBlockSplitter` for append-only
+/// response updates. The regular splitter remains the reference implementation
+/// and is used when content is replaced (replay, reload, or a new response).
+///
+/// The previous implementation rescanned every completed line from the start of
+/// the response on every streaming flush. This accumulator keeps the last line
+/// provisional, because a boundary at the end of the current string cannot be
+/// sealed until more content arrives, and resumes from that line on the next
+/// append. Stable chunks retain the same IDs and text as the reference splitter.
+struct StreamingMarkdownBlockAccumulator {
+    private var stableChunks: [StreamingMarkdownChunk] = []
+    private var chunkStartUTF16Offset = 0
+    private var pendingLineStartUTF16Offset = 0
+    private var isInsideFenceBeforePendingLine = false
+    private var lastTextUTF16Length = 0
+    private var isInitialized = false
+
+    mutating func update(
+        _ text: String,
+        appendOnly: Bool
+    ) -> StreamingMarkdownBlockSegments {
+        let textLength = text.utf16.count
+        if !isInitialized || !appendOnly || textLength < lastTextUTF16Length {
+            reset()
+        }
+
+        guard !isInitialized || textLength != lastTextUTF16Length else {
+            return result(in: text)
+        }
+
+        scanNewLines(in: text)
+        lastTextUTF16Length = textLength
+        isInitialized = true
+        return result(in: text)
+    }
+
+    mutating func reset() {
+        stableChunks = []
+        chunkStartUTF16Offset = 0
+        pendingLineStartUTF16Offset = 0
+        isInsideFenceBeforePendingLine = false
+        lastTextUTF16Length = 0
+        isInitialized = false
+    }
+
+    private mutating func scanNewLines(in text: String) {
+        let endOffset = text.utf16.count
+        var lineStartOffset = pendingLineStartUTF16Offset
+        var isInsideFence = isInsideFenceBeforePendingLine
+
+        guard lineStartOffset <= endOffset else {
+            reset()
+            return
+        }
+
+        while lineStartOffset < endOffset {
+            let lineStart = String.Index(utf16Offset: lineStartOffset, in: text)
+            let lineEnd = text[lineStart...].firstIndex(of: "\n") ?? text.endIndex
+            let nextLineStart = lineEnd < text.endIndex
+                ? text.index(after: lineEnd)
+                : text.endIndex
+            let nextLineOffset = nextLineStart.utf16Offset(in: text)
+
+            // A boundary at the end of the current string is provisional. Keep
+            // this line and its pre-line fence state for the next append.
+            guard nextLineOffset < endOffset else { break }
+
+            let line = text[lineStart..<lineEnd]
+            let trimmedLine = String(line).trimmingCharacters(in: .whitespacesAndNewlines)
+            var stableBoundaryOffset: Int?
+
+            if StreamingMarkdownBlockSplitter.isFenceDelimiter(trimmedLine) {
+                isInsideFence.toggle()
+                if !isInsideFence {
+                    stableBoundaryOffset = nextLineOffset
+                }
+            } else if !isInsideFence, lineEnd < text.endIndex {
+                if trimmedLine.isEmpty || StreamingMarkdownBlockSplitter.isStableSingleLineBlock(trimmedLine) {
+                    stableBoundaryOffset = nextLineOffset
+                }
+            }
+
+            if let stableBoundaryOffset,
+               shouldSealChunk(
+                   in: text,
+                   boundaryOffset: stableBoundaryOffset
+               ) {
+                appendChunk(
+                    in: text,
+                    from: chunkStartUTF16Offset,
+                    to: stableBoundaryOffset
+                )
+                chunkStartUTF16Offset = stableBoundaryOffset
+            }
+
+            lineStartOffset = nextLineOffset
+        }
+
+        pendingLineStartUTF16Offset = lineStartOffset
+        isInsideFenceBeforePendingLine = isInsideFence
+    }
+
+    private func shouldSealChunk(
+        in text: String,
+        boundaryOffset: Int
+    ) -> Bool {
+        guard boundaryOffset > chunkStartUTF16Offset else { return false }
+        guard stableChunks.count >= StreamingMarkdownBlockSplitter.maxSemanticStableChunkCount else {
+            return true
+        }
+
+        let chunkStart = String.Index(utf16Offset: chunkStartUTF16Offset, in: text)
+        let boundary = String.Index(utf16Offset: boundaryOffset, in: text)
+        return text.distance(from: chunkStart, to: boundary)
+            >= StreamingMarkdownBlockSplitter.stableChunkTargetCharacterCount
+    }
+
+    private mutating func appendChunk(
+        in text: String,
+        from startOffset: Int,
+        to endOffset: Int
+    ) {
+        guard startOffset < endOffset else { return }
+
+        let start = String.Index(utf16Offset: startOffset, in: text)
+        let end = String.Index(utf16Offset: endOffset, in: text)
+        let chunkText = String(text[start..<end])
+        guard !chunkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        stableChunks.append(
+            StreamingMarkdownChunk(
+                id: stableChunks.count,
+                text: chunkText
+            )
+        )
+    }
+
+    private func result(in text: String) -> StreamingMarkdownBlockSegments {
+        let activeStart = String.Index(
+            utf16Offset: min(chunkStartUTF16Offset, text.utf16.count),
+            in: text
+        )
+        return StreamingMarkdownBlockSegments(
+            stableChunks: stableChunks,
+            activeMarkdown: String(text[activeStart...])
+        )
     }
 }

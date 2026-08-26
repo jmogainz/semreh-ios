@@ -91,6 +91,54 @@ final class StreamingMarkdownBlockSplitterTests: XCTestCase {
     }
 }
 
+final class StreamingMarkdownBlockAccumulatorTests: XCTestCase {
+    func testAppendOnlyUpdatesMatchReferenceSplitter() {
+        let text = (0..<120)
+            .map { "Paragraph \($0) is complete.\n\n" }
+            .joined()
+            + "The final paragraph keeps growing."
+        var accumulator = StreamingMarkdownBlockAccumulator()
+
+        for length in stride(from: 1, through: text.count, by: 7) {
+            let end = text.index(text.startIndex, offsetBy: length)
+            let prefix = String(text[..<end])
+            let incremental = accumulator.update(prefix, appendOnly: length > 1)
+            XCTAssertEqual(
+                incremental,
+                StreamingMarkdownBlockSplitter.split(prefix),
+                "mismatch at prefix length \(length)"
+            )
+        }
+    }
+
+    func testReplacementResetsIncrementalState() {
+        var accumulator = StreamingMarkdownBlockAccumulator()
+        _ = accumulator.update("First paragraph.\n\nOld tail", appendOnly: false)
+
+        let replacement = "New heading\n\nNew tail"
+        XCTAssertEqual(
+            accumulator.update(replacement, appendOnly: false),
+            StreamingMarkdownBlockSplitter.split(replacement)
+        )
+    }
+
+    func testUnicodeAppendPreservesReferenceBoundaries() {
+        let text = "👩‍👩‍👧‍👦 first paragraph.\n\n第二段仍在增长。"
+        var accumulator = StreamingMarkdownBlockAccumulator()
+        var prefix = ""
+        var isFirstPrefix = true
+
+        for character in text {
+            prefix.append(character)
+            XCTAssertEqual(
+                accumulator.update(prefix, appendOnly: !isFirstPrefix),
+                StreamingMarkdownBlockSplitter.split(prefix)
+            )
+            isFirstPrefix = false
+        }
+    }
+}
+
 /// Width resolution for chat markdown table cells (issue #233). The layout
 /// itself needs a render pass to verify; this covers the pure clamp that
 /// decides the wrap width the cell height is measured at.

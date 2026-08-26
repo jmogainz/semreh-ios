@@ -165,14 +165,24 @@ private struct StreamingMarkdownChunkedView: View {
     /// blocks (paragraphs, list items) appear in reading order even when a
     /// fast stream backlogs a block's queue toward `maxStampLead`.
     @State private var chain = StreamingTextFadeStampChain()
+    @State private var blockAccumulator = StreamingMarkdownBlockAccumulator()
+    @State private var blockSegments = StreamingMarkdownBlockSegments(
+        stableChunks: [],
+        activeMarkdown: ""
+    )
 
-    private var segments: StreamingMarkdownBlockSegments {
-        StreamingMarkdownBlockSplitter.split(content)
+    init(content: String, colorScheme: ColorScheme) {
+        self.content = content
+        self.colorScheme = colorScheme
+        var accumulator = StreamingMarkdownBlockAccumulator()
+        let initialSegments = accumulator.update(content, appendOnly: false)
+        _blockAccumulator = State(initialValue: accumulator)
+        _blockSegments = State(initialValue: initialSegments)
     }
 
     var body: some View {
         let blockSplit = StreamingTextFadeTailSplitter.split(
-            segments.activeMarkdown,
+            blockSegments.activeMarkdown,
             firstFadeOrdinal: StreamedTextAnimationSettings.effectiveFirstFadeOrdinal(
                 firstFadeOrdinal,
                 reduceMotion: reduceMotion,
@@ -181,7 +191,7 @@ private struct StreamingMarkdownChunkedView: View {
         )
 
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(segments.stableChunks) { chunk in
+            ForEach(blockSegments.stableChunks) { chunk in
                 ChatMarkdownView(
                     content: chunk.text,
                     colorScheme: colorScheme,
@@ -223,7 +233,11 @@ private struct StreamingMarkdownChunkedView: View {
             anchorFadeWindowAtCurrentBlock()
         }
         .onChange(of: content) { oldContent, newContent in
-            advanceFadeWindow(from: oldContent, to: newContent)
+            let activeWindow = updateBlockSegments(
+                newContent,
+                appendOnly: newContent.hasPrefix(oldContent)
+            )
+            advanceFadeWindow(from: activeWindow.old, to: activeWindow.new)
         }
         .onChange(of: isStreamedTextAnimationEnabled) { _, isEnabled in
             if isEnabled {
@@ -253,17 +267,24 @@ private struct StreamingMarkdownChunkedView: View {
     /// the reopened window would arm blocks the user is already reading and
     /// visibly re-fade them.
     private func anchorFadeWindowAtCurrentBlock() {
-        let split = StreamingTextFadeTailSplitter.split(segments.activeMarkdown, firstFadeOrdinal: 0)
+        let split = StreamingTextFadeTailSplitter.split(blockSegments.activeMarkdown, firstFadeOrdinal: 0)
         firstFadeOrdinal = split.boundaryCount
         mountBoundaryCount = split.boundaryCount
         lastBoundaryCount = split.boundaryCount
         lastTouchedAt = [:]
     }
 
-    private func advanceFadeWindow(from oldContent: String, to newContent: String) {
+    private func updateBlockSegments(
+        _ newContent: String,
+        appendOnly: Bool
+    ) -> (old: String, new: String) {
+        let oldActive = blockSegments.activeMarkdown
+        blockSegments = blockAccumulator.update(newContent, appendOnly: appendOnly)
+        return (oldActive, blockSegments.activeMarkdown)
+    }
+
+    private func advanceFadeWindow(from oldActive: String, to newActive: String) {
         let now = Date().timeIntervalSinceReferenceDate
-        let oldActive = StreamingMarkdownBlockSplitter.split(oldContent).activeMarkdown
-        let newActive = StreamingMarkdownBlockSplitter.split(newContent).activeMarkdown
         let split = StreamingTextFadeTailSplitter.split(newActive, firstFadeOrdinal: firstFadeOrdinal)
 
         if !newActive.hasPrefix(oldActive) {
