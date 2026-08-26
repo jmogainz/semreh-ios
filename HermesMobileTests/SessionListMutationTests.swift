@@ -12,6 +12,25 @@ final class SessionListMutationTests: XCTestCase {
         super.tearDown()
     }
 
+    func testScheduledSessionGroupsPartitionOneCandidateCollection() throws {
+        let ordinary = SessionSummary(sessionId: "ordinary", title: "Ordinary")
+        let scheduled = SessionSummary(sessionId: "cron_scheduled", title: "Scheduled")
+        let archivedScheduled = SessionSummary(
+            sessionId: "cron_archived",
+            title: "Archived scheduled",
+            archived: true
+        )
+
+        let groups = ScheduledSessionGroups.partition(
+            [ordinary, scheduled, archivedScheduled],
+            totalScheduledCount: 2
+        )
+
+        XCTAssertEqual(groups.ordinary.map(\.sessionId), ["ordinary"])
+        XCTAssertEqual(groups.scheduled.map(\.sessionId), ["cron_scheduled"])
+        XCTAssertEqual(groups.totalScheduledCount, 2)
+    }
+
     @MainActor
     func testLoadFallsBackToCachedSessionsForNetworkTimeout() async throws {
         let context = try makeContext()

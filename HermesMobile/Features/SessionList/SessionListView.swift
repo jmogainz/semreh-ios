@@ -428,7 +428,9 @@ struct SessionListView: View {
     }
 
     private var content: some View {
-        List {
+        let sessionGroups = scheduledSessionGroups
+
+        return List {
             header
                 .sessionsTopChromeListRow()
 
@@ -461,11 +463,11 @@ struct SessionListView: View {
                 )
             }
 
-            if scheduledSessionGroups.showsDisclosure(isSearchActive: isSearchingSessions) {
+            if sessionGroups.showsDisclosure(isSearchActive: isSearchingSessions) {
                 ScheduledSessionsDisclosure(
                     viewModel: viewModel,
-                    sessions: scheduledSessionGroups.scheduled,
-                    totalCount: scheduledSessionGroups.totalScheduledCount,
+                    sessions: sessionGroups.scheduled,
+                    totalCount: sessionGroups.totalScheduledCount,
                     isSearchActive: isSearchingSessions,
                     showsMessageCount: showsSessionMessageCount,
                     showsWorkspace: showsSessionWorkspace,
@@ -480,7 +482,7 @@ struct SessionListView: View {
 
             SessionListRowsSection(
                 viewModel: viewModel,
-                sessions: scheduledSessionGroups.ordinary,
+                sessions: sessionGroups.ordinary,
                 emptyTitle: emptySessionsTitle,
                 emptyDescription: emptySessionsDescription,
                 isSearchActive: isSearchingSessions,
@@ -490,7 +492,7 @@ struct SessionListView: View {
                     ? navigationState.selectedSessionID
                     : nil,
                 actions: sessionRowActions,
-                suppressEmptyState: !scheduledSessionGroups.scheduled.isEmpty
+                suppressEmptyState: !sessionGroups.scheduled.isEmpty
             )
 
             if showsArchivedEntry {

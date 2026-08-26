@@ -23,6 +23,17 @@ struct ScheduledSessionGroups: Equatable {
     let scheduled: [SessionSummary]
     let totalScheduledCount: Int
 
+    static func partition(
+        _ candidates: [SessionSummary],
+        totalScheduledCount: Int
+    ) -> Self {
+        Self(
+            ordinary: candidates.filter { !$0.isCronSession },
+            scheduled: candidates.filter { $0.isCronSession && $0.archived != true },
+            totalScheduledCount: totalScheduledCount
+        )
+    }
+
     var scheduledPreview: [SessionSummary] {
         Array(scheduled.prefix(5))
     }
@@ -189,20 +200,14 @@ final class SessionListViewModel {
         selectedProjectID: String?,
         automatedVisibility: AutomatedSessionVisibility = .showAll
     ) -> ScheduledSessionGroups {
-        let ordinaryCandidates = visibleSessions(
-            searchText: searchText,
-            selectedProjectID: selectedProjectID,
-            automatedVisibility: automatedVisibility
-        )
-        let scheduledCandidates = visibleSessions(
+        let candidates = visibleSessions(
             searchText: searchText,
             selectedProjectID: selectedProjectID,
             automatedVisibility: automatedVisibility
         )
 
-        return ScheduledSessionGroups(
-            ordinary: ordinaryCandidates.filter { !$0.isCronSession },
-            scheduled: scheduledCandidates.filter { $0.isCronSession && $0.archived != true },
+        return ScheduledSessionGroups.partition(
+            candidates,
             totalScheduledCount: automatedVisibility.showsCron
                 ? sessions.filter { $0.isCronSession && $0.archived != true }.count
                 : 0
