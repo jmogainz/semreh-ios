@@ -34,6 +34,15 @@ struct SessionNavigationState: Equatable {
         destination?.selectedSessionID ?? newChatSessionID
     }
 
+    var isConversationPresented: Bool {
+        switch destination {
+        case .session, .newChat:
+            true
+        case .utility, nil:
+            false
+        }
+    }
+
     var isCreatingNewChat: Bool {
         guard case .newChat = destination else { return false }
         return newChatSessionID == nil
@@ -71,6 +80,17 @@ struct SessionNavigationState: Equatable {
 
     mutating func clearDestination() {
         destination = nil
+        newChatSessionID = nil
+        destinationOrigin = nil
+    }
+
+    /// The shell's surface switch is an explicit request to return to the
+    /// Sessions root rather than reopen the last conversation. This is scoped to
+    /// the shell presentation; regular session-list callers keep the existing
+    /// last-session restoration behavior.
+    mutating func resetForShellSurfaceSwitch() {
+        destination = nil
+        lastSelectedSessionID = nil
         newChatSessionID = nil
         destinationOrigin = nil
     }

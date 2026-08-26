@@ -9,6 +9,9 @@ struct SessionListView: View {
 
     @Bindable var authManager: AuthManager
     let server: URL
+    let usesShellChrome: Bool
+    let shellSurfaceVisitID: Int
+    let onConversationVisibilityChanged: (Bool) -> Void
     @Binding private var pendingSharedImport: SharedImport?
     @Binding private var pendingDeepLinkedSessionID: String?
     @Binding private var requestedNewChat: NewChatRequest?
@@ -74,17 +77,25 @@ struct SessionListView: View {
         server: URL,
         pendingSharedImport: Binding<SharedImport?> = .constant(nil),
         pendingDeepLinkedSessionID: Binding<String?> = .constant(nil),
-        requestedNewChat: Binding<NewChatRequest?> = .constant(nil)
+        requestedNewChat: Binding<NewChatRequest?> = .constant(nil),
+        usesShellChrome: Bool = false,
+        shellSurfaceVisitID: Int = 0,
+        onConversationVisibilityChanged: @escaping (Bool) -> Void = { _ in }
     ) {
         self.authManager = authManager
         self.server = server
+        self.usesShellChrome = usesShellChrome
+        self.shellSurfaceVisitID = shellSurfaceVisitID
+        self.onConversationVisibilityChanged = onConversationVisibilityChanged
         _pendingSharedImport = pendingSharedImport
         _pendingDeepLinkedSessionID = pendingDeepLinkedSessionID
         _requestedNewChat = requestedNewChat
         _viewModel = State(initialValue: SessionListViewModel(server: server))
         _navigationState = State(
             initialValue: SessionNavigationState(
-                lastSelectedSessionID: SessionNavigationPersistence.load(for: server)
+                lastSelectedSessionID: shellSurfaceVisitID == 0
+                    ? SessionNavigationPersistence.load(for: server)
+                    : nil
             )
         )
         _showsCliSessions = AppStorage(
@@ -261,6 +272,7 @@ struct SessionListView: View {
                 openPendingSharedImportIfNeeded()
                 openRequestedNewChatIfNeeded()
                 refreshAfterReturningIfNeeded()
+                onConversationVisibilityChanged(navigationState.isConversationPresented)
             }
             .onChange(of: pendingSharedImport) {
                 openPendingSharedImportIfNeeded()
@@ -278,7 +290,14 @@ struct SessionListView: View {
                 guard !showsProjectsSection else { return }
                 selectedProjectID = nil
             }
+            .onChange(of: shellSurfaceVisitID) { _, newValue in
+                guard usesShellChrome, newValue > 0 else { return }
+                navigationState.resetForShellSurfaceSwitch()
+                persistLastSelectedSession()
+                onConversationVisibilityChanged(false)
+            }
             .onChange(of: navigationState.destination) { oldValue, newValue in
+                onConversationVisibilityChanged(navigationState.isConversationPresented)
                 SessionListNewChatReturn.run(
                     from: oldValue,
                     to: newValue,
@@ -329,17 +348,24 @@ struct SessionListView: View {
     }
 
     private var sessionListSurface: some View {
-        ZStack(alignment: .bottomTrailing) {
+        ZStack(alignment: .bottom) {
             SemrehBackdrop()
                 .ignoresSafeArea()
 
             content
 
-            if !isSearchingSessions {
+            if !usesShellChrome, !isSearchingSessions {
                 newSessionButton
                     .padding(.trailing, 24)
                     .padding(.bottom, 22)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
+            if usesShellChrome {
+                shellSearchBar
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 92)
             }
         }
     }
@@ -431,16 +457,27 @@ struct SessionListView: View {
         let sessionGroups = scheduledSessionGroups
 
         return List {
-            header
-                .sessionsTopChromeListRow()
-
-            if viewModel.isViewingCachedData {
-                OfflineCacheBanner()
-                    .padding(.top, 16)
-                    .sessionsScreenListRow()
+            if usesShellChrome {
+                Color.clear
+                    .frame(height: 112)
+                    .sessionsTopChromeListRow()
+            } else {
+                header
+                    .sessionsTopChromeListRow()
             }
 
-            if !isSearchingSessions {
+            if viewModel.isViewingCachedData {
+                if usesShellChrome {
+                    shellOfflineStatus
+                        .sessionsScreenListRow()
+                } else {
+                    OfflineCacheBanner()
+                        .padding(.top, 16)
+                        .sessionsScreenListRow()
+                }
+            }
+
+            if !usesShellChrome, !isSearchingSessions {
                 SessionSidebarUtilityRows(
                     viewModel: viewModel,
                     topPadding: 10,
@@ -492,7 +529,9 @@ struct SessionListView: View {
                     ? navigationState.selectedSessionID
                     : nil,
                 actions: sessionRowActions,
-                suppressEmptyState: !sessionGroups.scheduled.isEmpty
+                suppressEmptyState: !sessionGroups.scheduled.isEmpty,
+                useMessagesStyle: usesShellChrome,
+                showsSectionHeader: !usesShellChrome
             )
 
             if showsArchivedEntry {
@@ -501,7 +540,7 @@ struct SessionListView: View {
             }
 
             Color.clear
-                .frame(height: 104)
+                .frame(height: usesShellChrome ? 82 : 104)
                 .sessionsScreenListRow()
                 .accessibilityHidden(true)
         }
@@ -539,6 +578,25 @@ struct SessionListView: View {
         .onChange(of: searchFieldIsFocused) { _, newValue in
             handleSearchFieldFocusChange(newValue)
         }
+    }
+
+    private var shellOfflineStatus: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "wifi.slash")
+                .font(.system(size: 13, weight: .semibold))
+            Text("Offline · cached sessions")
+                .font(.caption.weight(.semibold))
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.orange)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 9)
+        .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.horizontal, 18)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Offline, viewing cached sessions")
     }
 
     private var searchChrome: some View {
@@ -579,6 +637,65 @@ struct SessionListView: View {
         )
         .clipShape(Capsule())
         .contentShape(Capsule())
+    }
+
+    private var shellSearchBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            if searchChromeIsExpanded {
+                TextField("Search sessions", text: $searchText)
+                    .font(AppFont.body())
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($searchFieldIsFocused)
+                    .submitLabel(.done)
+                    .lineLimit(1)
+                    .accessibilityLabel("Search sessions")
+            } else {
+                Text("Search")
+                    .font(AppFont.body())
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+
+            Spacer(minLength: 0)
+
+            if searchChromeIsExpanded {
+                Button {
+                    closeSearch()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 30, height: 30)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close search")
+            } else {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.horizontal, 18)
+        .frame(height: 52)
+        .adaptiveGlass(
+            .regular,
+            isInteractive: true,
+            fallbackMaterial: .ultraThinMaterial,
+            in: Capsule()
+        )
+        .contentShape(Capsule())
+        .onTapGesture {
+            guard !searchChromeIsExpanded else { return }
+            openSearch()
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(searchChromeIsExpanded ? "Session search" : "Search sessions")
     }
 
     private var searchTextField: some View {

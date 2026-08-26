@@ -318,6 +318,14 @@
 		C5A0D8F5502048B6B9258B01 /* InsightsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A0D8F5502048B6B9258B00 /* InsightsViewModelTests.swift */; };
 		105050000000000000000001 /* ComposerModelPickerSectionExpansionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105050000000000000000002 /* ComposerModelPickerSectionExpansionState.swift */; };
 		105050000000000000000003 /* ComposerModelPickerSectionExpansionStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105050000000000000000004 /* ComposerModelPickerSectionExpansionStateTests.swift */; };
+		D50100000000000000000002 /* TeamsCollaborationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D50100000000000000000001 /* TeamsCollaborationTests.swift */; };
+		D50200000000000000000002 /* TeamCollaborationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D50200000000000000000001 /* TeamCollaborationModels.swift */; };
+		D50300000000000000000002 /* TeamsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D50300000000000000000001 /* TeamsView.swift */; };
+		D51000000000000000000002 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D51000000000000000000001 /* AppShellView.swift */; };
+		D51100000000000000000002 /* AppShellMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D51100000000000000000001 /* AppShellMenuView.swift */; };
+		D51200000000000000000002 /* YouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D51200000000000000000001 /* YouView.swift */; };
+		D51300000000000000000002 /* MessagesSessionRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D51300000000000000000001 /* MessagesSessionRowView.swift */; };
+		D51400000000000000000002 /* AppShellNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D51400000000000000000001 /* AppShellNavigationTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -667,6 +675,14 @@
 		FC2A37872AC842629FBDDFA4 /* SlashCommandAutocompleteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlashCommandAutocompleteView.swift; sourceTree = "<group>"; };
 		105050000000000000000002 /* ComposerModelPickerSectionExpansionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerModelPickerSectionExpansionState.swift; sourceTree = "<group>"; };
 		105050000000000000000004 /* ComposerModelPickerSectionExpansionStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerModelPickerSectionExpansionStateTests.swift; sourceTree = "<group>"; };
+		D50100000000000000000001 /* TeamsCollaborationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamsCollaborationTests.swift; sourceTree = "<group>"; };
+		D50200000000000000000001 /* TeamCollaborationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamCollaborationModels.swift; sourceTree = "<group>"; };
+		D50300000000000000000001 /* TeamsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamsView.swift; sourceTree = "<group>"; };
+		D51000000000000000000001 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
+		D51100000000000000000001 /* AppShellMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellMenuView.swift; sourceTree = "<group>"; };
+		D51200000000000000000001 /* YouView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouView.swift; sourceTree = "<group>"; };
+		D51300000000000000000001 /* MessagesSessionRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagesSessionRowView.swift; sourceTree = "<group>"; };
+		D51400000000000000000001 /* AppShellNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellNavigationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -860,6 +876,8 @@
 				A04500000000000000000018 /* LiveActivityTests.swift */,
 				1A2B3C4D5E6F700000000340 /* AppIntentNewChatTests.swift */,
 				1A2B3C4D5E6F700000000344 /* AppIntentNewChatInProfileTests.swift */,
+				D50100000000000000000001 /* TeamsCollaborationTests.swift */,
+				D51400000000000000000001 /* AppShellNavigationTests.swift */,
 			);
 			path = HermesMobileTests;
 			sourceTree = "<group>";
@@ -947,6 +965,9 @@
 				1A2B3C4D5E6F70000000206 /* Memory */,
 				B50E1CE3A8912B92B1924714 /* Insights */,
 				C1490000000000000000000D /* Kanban */,
+				D50000000000000000000003 /* Teams */,
+				D51000000000000000000003 /* AppShell */,
+				D51100000000000000000003 /* You */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -1004,6 +1025,7 @@
 				C08800000000000000000002 /* SessionHaptics.swift */,
 				A040C0DE0000000000000002 /* ProjectCreationSheet.swift */,
 				A048C0DE0000000000000002 /* SessionRenameSheet.swift */,
+				D51300000000000000000001 /* MessagesSessionRowView.swift */,
 			);
 			path = SessionList;
 			sourceTree = "<group>";
@@ -1243,6 +1265,32 @@
 				931EC010A2D940B0E42287A4 /* InsightsViewModel.swift */,
 			);
 			path = Insights;
+			sourceTree = "<group>";
+		};
+		D50000000000000000000003 /* Teams */ = {
+			isa = PBXGroup;
+			children = (
+				D50200000000000000000001 /* TeamCollaborationModels.swift */,
+				D50300000000000000000001 /* TeamsView.swift */,
+			);
+			path = Teams;
+			sourceTree = "<group>";
+		};
+		D51000000000000000000003 /* AppShell */ = {
+			isa = PBXGroup;
+			children = (
+				D51000000000000000000001 /* AppShellView.swift */,
+				D51100000000000000000001 /* AppShellMenuView.swift */,
+			);
+			path = AppShell;
+			sourceTree = "<group>";
+		};
+		D51100000000000000000003 /* You */ = {
+			isa = PBXGroup;
+			children = (
+				D51200000000000000000001 /* YouView.swift */,
+			);
+			path = You;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -1632,6 +1680,12 @@
 				26AB000000000000000000B2 /* ProvidersView.swift in Sources */,
 				B5A100000000000000000001 /* SharedDraftStore.swift in Sources */,
 				B5A100000000000000000008 /* ShareInputReader.swift in Sources */,
+				D50200000000000000000002 /* TeamCollaborationModels.swift in Sources */,
+				D50300000000000000000002 /* TeamsView.swift in Sources */,
+				D51000000000000000000002 /* AppShellView.swift in Sources */,
+				D51100000000000000000002 /* AppShellMenuView.swift in Sources */,
+				D51200000000000000000002 /* YouView.swift in Sources */,
+				D51300000000000000000002 /* MessagesSessionRowView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1733,6 +1787,8 @@
 				A04500000000000000000008 /* LiveActivityTests.swift in Sources */,
 				1A2B3C4D5E6F700000000341 /* AppIntentNewChatTests.swift in Sources */,
 				1A2B3C4D5E6F700000000345 /* AppIntentNewChatInProfileTests.swift in Sources */,
+				D50100000000000000000002 /* TeamsCollaborationTests.swift in Sources */,
+				D51400000000000000000002 /* AppShellNavigationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

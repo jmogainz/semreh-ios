@@ -397,11 +397,15 @@ struct SessionListRowsSection: View {
     let selectedSessionID: String?
     let actions: SessionListRowActions
     var suppressEmptyState = false
+    var useMessagesStyle = false
+    var showsSectionHeader = true
 
     var body: some View {
-        sessionsHeaderRow
-            .padding(.top, isSearchActive ? 16 : 28)
-            .sessionsScreenListRow()
+        if showsSectionHeader {
+            sessionsHeaderRow
+                .padding(.top, isSearchActive ? 16 : 28)
+                .sessionsScreenListRow()
+        }
 
         if viewModel.isLoading && viewModel.sessions.isEmpty {
             sessionLoadingSkeletonRows
@@ -424,7 +428,8 @@ struct SessionListRowsSection: View {
                     showsMessageCount: showsMessageCount,
                     showsWorkspace: showsWorkspace,
                     selectedSessionID: selectedSessionID,
-                    actions: actions
+                    actions: actions,
+                    useMessagesStyle: useMessagesStyle
                 )
             }
         }
@@ -512,17 +517,25 @@ struct SessionInteractiveRow: View {
     let showsWorkspace: Bool
     let selectedSessionID: String?
     let actions: SessionListRowActions
+    var useMessagesStyle = false
 
     var body: some View {
         Button {
             actions.open(session)
         } label: {
-            SessionRowView(
-                session: session,
-                showsMessageCount: showsMessageCount,
-                showsWorkspace: showsWorkspace,
-                isViewingCachedData: viewModel.isViewingCachedData
-            )
+            if useMessagesStyle {
+                MessagesSessionRowView(
+                    session: session,
+                    isViewingCachedData: viewModel.isViewingCachedData
+                )
+            } else {
+                SessionRowView(
+                    session: session,
+                    showsMessageCount: showsMessageCount,
+                    showsWorkspace: showsWorkspace,
+                    isViewingCachedData: viewModel.isViewingCachedData
+                )
+            }
         }
         .buttonStyle(.plain)
         .id(session.id)
