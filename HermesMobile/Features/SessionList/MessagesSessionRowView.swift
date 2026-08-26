@@ -1,18 +1,45 @@
 import SwiftUI
 
-/// A Messages-inspired session row used only by the new mobile shell. The existing
+/// A Messages-inspired session row used only by the mobile shell. The existing
 /// SessionRowView remains available for the desktop-like/sidebar presentation.
 struct MessagesSessionRowView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @StateObject private var readStateStore = SessionReadStateStore.shared
 
     let session: SessionSummary
     let isViewingCachedData: Bool
+    var server: URL? = nil
+    var liveOwnerSessionIDs: Set<String> = []
+
+    private var resolvedLiveOwnerSessionIDs: Set<String> {
+        liveOwnerSessionIDs.union(OpenChatSessionStore.shared.allLiveSessionIDs)
+    }
+
+    private var rowState: MessagesSessionRowState {
+        MessagesSessionRowFormatter.rowState(
+            for: session,
+            liveOwnerSessionIDs: resolvedLiveOwnerSessionIDs,
+            isUnread: isUnread
+        )
+    }
+
+    private var isUnread: Bool {
+        guard let server else { return false }
+        return readStateStore.isUnread(for: session, server: server)
+    }
+
+    private var previewText: String {
+        MessagesSessionRowFormatter.previewText(
+            for: session,
+            isViewingCachedData: isViewingCachedData,
+            liveOwnerSessionIDs: resolvedLiveOwnerSessionIDs,
+            isUnread: isUnread
+        )
+    }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 13) {
-            activeIndicator
-
-            SessionAvatarView(session: session)
+        HStack(alignment: .center, spacing: 12) {
+            avatarWithStatusIndicator
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -49,8 +76,8 @@ struct MessagesSessionRowView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(minHeight: 86, alignment: .center)
+        .padding(.vertical, 10)
+        .frame(minHeight: 68, alignment: .center)
         .background {
             Rectangle()
                 .fill(Color.clear)
@@ -58,7 +85,7 @@ struct MessagesSessionRowView: View {
                     Rectangle()
                         .fill(Color.primary.opacity(0.10))
                         .frame(height: 0.5)
-                        .padding(.leading, 83)
+                        .padding(.leading, 70)
                 }
         }
         .contentShape(Rectangle())
@@ -66,42 +93,28 @@ struct MessagesSessionRowView: View {
         .accessibilityLabel(accessibilitySummary)
     }
 
-    private var activeIndicator: some View {
-        Circle()
-            .fill(isActive ? Color.accentColor : .clear)
-            .frame(width: 8, height: 8)
-            .frame(width: 8)
-            .accessibilityHidden(true)
-    }
+    private var avatarWithStatusIndicator: some View {
+        ZStack(alignment: .bottomTrailing) {
+            SessionAvatarView(session: session)
 
-    private var isActive: Bool {
-        SessionRowView.isActiveStreaming(session)
-            || session.hasPendingUserMessage == true
-    }
-
-    private var previewText: String {
-        if session.hasPendingUserMessage == true {
-            return "Waiting for your message…"
+            switch rowState {
+            case .live:
+                MessagesLiveStreamingIndicator()
+                    .offset(x: 2, y: 2)
+            case .unread:
+                Circle()
+                    .fill(Color.accentColor)
+                    .frame(width: 10, height: 10)
+                    .overlay {
+                        Circle()
+                            .stroke(Color(.systemBackground), lineWidth: 1.5)
+                    }
+                    .offset(x: 2, y: 2)
+            case .idle:
+                EmptyView()
+            }
         }
-
-        var parts: [String] = []
-        if let count = session.messageCount, count >= 0 {
-            parts.append("\(count) messages")
-        }
-
-        if let workspace = normalizedWorkspace {
-            parts.append(workspace)
-        }
-
-        if let profile = normalizedProfile {
-            parts.append(profile)
-        }
-
-        if parts.isEmpty {
-            return isViewingCachedData ? "Cached Hermes session" : "Hermes session"
-        }
-
-        return parts.joined(separator: " · ")
+        .frame(width: 44, height: 44)
     }
 
     private var relativeDate: String {
@@ -114,31 +127,15 @@ struct MessagesSessionRowView: View {
         )
     }
 
-    private var normalizedWorkspace: String? {
-        guard let workspace = session.workspace?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !workspace.isEmpty
-        else {
-            return nil
-        }
-
-        let basename = (workspace as NSString).lastPathComponent
-        return basename.isEmpty ? workspace : basename
-    }
-
-    private var normalizedProfile: String? {
-        guard let profile = session.profile?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !profile.isEmpty
-        else {
-            return nil
-        }
-
-        return profile
-    }
-
     private var accessibilitySummary: String {
         var values = [SessionRowView.displayTitle(for: session), previewText, relativeDate]
-        if isActive {
-            values.append("Active")
+        if rowState == .live {
+            values.append("Live")
+        } else if rowState == .unread {
+            values.append("Unread")
+        }
+        if isViewingCachedData {
+            values.append("Cached")
         }
         return values.joined(separator: ", ")
     }
@@ -163,15 +160,15 @@ private struct SessionAvatarView: View {
 
             if session.isCliSession == true {
                 Image(systemName: "terminal.fill")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
             } else {
                 Text(initials)
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
             }
         }
-        .frame(width: 58, height: 58)
+        .frame(width: 44, height: 44)
         .overlay {
             Circle()
                 .stroke(Color.white.opacity(0.16), lineWidth: 1)
@@ -187,6 +184,161 @@ private struct SessionAvatarView: View {
         }
 
         return String(title.prefix(2)).uppercased()
+    }
+}
+
+private struct MessagesLiveStreamingIndicator: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isPulsing = false
+
+    var body: some View {
+        Circle()
+            .fill(Color.green)
+            .frame(width: 10, height: 10)
+            .overlay {
+                Circle()
+                    .stroke(Color(.systemBackground), lineWidth: 1.5)
+            }
+            .scaleEffect(reduceMotion ? 1.0 : (isPulsing ? 1.25 : 0.95))
+            .opacity(reduceMotion ? 1.0 : (isPulsing ? 1.0 : 0.75))
+            .accessibilityHidden(true)
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
+                    isPulsing = true
+                }
+            }
+            .onChange(of: reduceMotion) { _, newValue in
+                if newValue {
+                    isPulsing = false
+                } else {
+                    withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
+                        isPulsing = true
+                    }
+                }
+            }
+            .onDisappear {
+                isPulsing = false
+            }
+    }
+}
+
+/// Pure state and formatting helpers for Messages-style session rows.
+enum MessagesSessionRowState: Equatable {
+    case live
+    case unread
+    case idle
+}
+
+enum MessagesSessionRowFormatter {
+    /// Evaluates live work before local unread state so a response in progress
+    /// displays the green activity indicator rather than a stale unread dot.
+    static func rowState(
+        for session: SessionSummary,
+        liveOwnerSessionIDs: Set<String> = [],
+        isUnread: Bool = false
+    ) -> MessagesSessionRowState {
+        if SessionRowView.isActiveStreaming(session, liveOwnerSessionIDs: liveOwnerSessionIDs)
+            || session.hasPendingUserMessage == true {
+            return .live
+        }
+
+        if isUnread {
+            return .unread
+        }
+
+        return .idle
+    }
+
+    /// Formats the secondary row preview, prioritizing useful latest activity over
+    /// repeated metadata strings.
+    static func previewText(
+        for session: SessionSummary,
+        isViewingCachedData: Bool = false,
+        liveOwnerSessionIDs: Set<String> = [],
+        isUnread: Bool = false
+    ) -> String {
+        // 1. Live activity / pending input takes highest priority
+        if SessionRowView.isActiveStreaming(session, liveOwnerSessionIDs: liveOwnerSessionIDs) {
+            return "Streaming response…"
+        }
+        if session.hasPendingUserMessage == true {
+            return "Waiting for your message…"
+        }
+
+        if isUnread {
+            return "New agent reply"
+        }
+
+        // 2. Specialized session run context
+        if session.isCronSession {
+            if let workspace = normalizedWorkspace(session.workspace) {
+                return "Scheduled run · \(workspace)"
+            }
+            return "Scheduled run"
+        }
+        if session.isDelegatedSubagentSession {
+            if let workspace = normalizedWorkspace(session.workspace) {
+                return "Subagent run · \(workspace)"
+            }
+            return "Subagent run"
+        }
+        if session.isCliSession == true {
+            if let workspace = normalizedWorkspace(session.workspace) {
+                return "CLI session · \(workspace)"
+            }
+            return "CLI session"
+        }
+
+        // 3. Model in use (provides actionable model context)
+        if let model = session.model?.trimmingCharacters(in: .whitespacesAndNewlines), !model.isEmpty {
+            if let workspace = normalizedWorkspace(session.workspace) {
+                return "\(model) · \(workspace)"
+            } else if let profile = normalizedProfile(session.profile) {
+                return "\(model) · \(profile)"
+            } else {
+                return model
+            }
+        }
+
+        // 4. Secondary fallback: message count, workspace, profile metadata
+        var parts: [String] = []
+        if let count = session.messageCount, count > 0 {
+            parts.append(count == 1 ? "1 message" : "\(count) messages")
+        }
+        if let workspace = normalizedWorkspace(session.workspace) {
+            parts.append(workspace)
+        }
+        if let profile = normalizedProfile(session.profile) {
+            parts.append(profile)
+        }
+
+        if parts.isEmpty {
+            return isViewingCachedData ? "Cached Hermes session" : "Hermes session"
+        }
+
+        return parts.joined(separator: " · ")
+    }
+
+    static func normalizedWorkspace(_ rawWorkspace: String?) -> String? {
+        guard let workspace = rawWorkspace?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !workspace.isEmpty
+        else {
+            return nil
+        }
+
+        let basename = (workspace as NSString).lastPathComponent
+        return basename.isEmpty ? workspace : basename
+    }
+
+    static func normalizedProfile(_ rawProfile: String?) -> String? {
+        guard let profile = rawProfile?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !profile.isEmpty
+        else {
+            return nil
+        }
+
+        return profile
     }
 }
 

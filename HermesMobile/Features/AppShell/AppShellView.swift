@@ -66,7 +66,7 @@ struct AppShellView: View {
     var body: some View {
         surfaceContent
             .safeAreaInset(edge: .top, spacing: 0) {
-                if !isSessionConversationPresented {
+                if !isSessionConversationPresented && selectedSurface != .you {
                     AppShellTopBar(
                         surface: selectedSurface,
                         onMenu: { isMenuPresented = true },
@@ -229,6 +229,7 @@ private struct AppShellCircularButtonStyle: ButtonStyle {
 struct AppShellBottomBar: View {
     @Binding var selection: AppShellSurface
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var tabSelectionNamespace
 
     var body: some View {
         AdaptiveGlassContainer(spacing: 12) {
@@ -237,9 +238,10 @@ struct AppShellBottomBar: View {
                     AppShellTabButton(
                         surface: surface,
                         isSelected: selection == surface,
+                        namespace: tabSelectionNamespace,
                         reduceMotion: reduceMotion
                     ) {
-                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
+                        withAnimation(reduceMotion ? nil : .snappy(duration: 0.28, extraBounce: 0.04)) {
                             selection = surface
                         }
                     }
@@ -265,6 +267,7 @@ struct AppShellBottomBar: View {
 private struct AppShellTabButton: View {
     let surface: AppShellSurface
     let isSelected: Bool
+    let namespace: Namespace.ID
     let reduceMotion: Bool
     let action: () -> Void
 
@@ -273,6 +276,7 @@ private struct AppShellTabButton: View {
             VStack(spacing: 4) {
                 Image(systemName: surface.systemImage)
                     .font(.system(size: 20, weight: isSelected ? .semibold : .medium))
+                    .scaleEffect(reduceMotion ? 1.0 : (isSelected ? 1.05 : 1.0))
                 Text(surface.title)
                     .font(.caption.weight(isSelected ? .semibold : .medium))
             }
@@ -287,6 +291,10 @@ private struct AppShellTabButton: View {
                             Capsule()
                                 .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
                         }
+                        .matchedGeometryEffect(
+                            id: "selectedTabIndicator",
+                            in: namespace
+                        )
                 }
             }
             .contentShape(Capsule())
@@ -294,7 +302,7 @@ private struct AppShellTabButton: View {
         .buttonStyle(.plain)
         .accessibilityLabel(surface.title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: isSelected)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.28, extraBounce: 0.04), value: isSelected)
     }
 }
 

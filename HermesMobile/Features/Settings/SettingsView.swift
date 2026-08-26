@@ -14,11 +14,20 @@ struct SettingsView: View {
     let server: URL
     /// When set, Settings scrolls to this section once on first appear (#283).
     let initialScrollTarget: SettingsScrollAnchor?
+    /// Optional content rendered above the existing settings cards (for example,
+    /// the profile summary in the shell's You tab).
+    let header: AnyView?
 
-    init(authManager: AuthManager, server: URL, initialScrollTarget: SettingsScrollAnchor? = nil) {
+    init(
+        authManager: AuthManager,
+        server: URL,
+        initialScrollTarget: SettingsScrollAnchor? = nil,
+        header: AnyView? = nil
+    ) {
         self.authManager = authManager
         self.server = server
         self.initialScrollTarget = initialScrollTarget
+        self.header = header
         // The CLI-sessions toggle is server-synced (#19): loads adopt the
         // server's `show_cli_sessions`, toggles POST it back, failures revert.
         // Stored per-server so one server's value never leaks into another.
@@ -100,6 +109,10 @@ struct SettingsView: View {
         ScrollViewReader { proxy in
         ScrollView {
             VStack(spacing: settingsCardSpacing) {
+                if let header {
+                    header
+                }
+
                 SettingsCard(title: String(localized: "Identity")) {
                     SessionIdentitySettingsEditor(
                         displayName: $identityDisplayName,
