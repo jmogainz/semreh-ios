@@ -10,6 +10,10 @@ final class OpenChatSessionStore {
 
     private var viewModels: [OpenChatSessionKey: ChatViewModel] = [:]
     private var accessOrder: [OpenChatSessionKey] = []
+    /// One canonical refresh task per server. Foreground, pull-to-refresh, reopen,
+    /// and event hints may arrive together; they all await the same reconciliation
+    /// instead of issuing duplicate `/api/session` loads for every retained chat.
+    private var refreshTasks: [String: Task<Int, Never>] = [:]
     private(set) var liveOwnershipGeneration = 0
 
     var retainedSessionCountForTesting: Int { viewModels.count }
@@ -106,6 +110,26 @@ final class OpenChatSessionStore {
         modelContext: ModelContext? = nil
     ) async -> Int {
         let serverKey = OpenChatSessionKey.normalizedServer(server)
+        if let existingTask = refreshTasks[serverKey] {
+            return await existingTask.value
+        }
+
+        let task = Task { @MainActor [weak self] in
+            defer { self?.refreshTasks.removeValue(forKey: serverKey) }
+            guard let self else { return 0 }
+            return await self.refreshOpenSessionsUncoalesced(
+                for: serverKey,
+                modelContext: modelContext
+            )
+        }
+        refreshTasks[serverKey] = task
+        return await task.value
+    }
+
+    private func refreshOpenSessionsUncoalesced(
+        for serverKey: String,
+        modelContext: ModelContext?
+    ) async -> Int {
         let openViewModels = viewModels.compactMap { (key, viewModel) -> ChatViewModel? in
             guard key.server == serverKey, viewModel.hasServerBackedSession else { return nil }
             return viewModel
@@ -125,6 +149,8 @@ final class OpenChatSessionStore {
     }
 
     func resetForTesting() {
+        refreshTasks.values.forEach { $0.cancel() }
+        refreshTasks.removeAll()
         viewModels.values.forEach { $0.stopSessionEventSync() }
         viewModels.removeAll()
         accessOrder.removeAll()
@@ -294,12 +320,19 @@ final class SessionEventStreamCoordinator {
             guard let self, self.generation == connectionGeneration else { return }
 
             if case let .sessionSnapshot(snapshot) = event {
-                guard Self.normalizedID(snapshot.sessionId ?? snapshot.id) == Self.normalizedID(self.sessionID) else {
+                guard Self.normalizedID(snapshot.sessionId ?? snapshot.id) == Self.normalizedID(self.sessionID),
+                      let onSnapshot = self.onSnapshot,
+                      onSnapshot(snapshot)
+                else {
+                    // A malformed, wrong-session, or rejected snapshot is not a
+                    // recovery boundary. Keep the durable cursor so the next
+                    // reconnect can retry the same authoritative state.
                     return
                 }
-                // A snapshot means the server could not honor the prior replay
-                // cursor. It is a recovery boundary: discard the stale cursor and
-                // all prior dedupe state before the next reconnect.
+
+                // A successfully applied snapshot means the server could not honor
+                // the prior replay cursor. It is a recovery boundary: discard the
+                // stale cursor and all prior dedupe state before the next reconnect.
                 self.cursorPersistTask?.cancel()
                 self.cursorPersistTask = nil
                 self.lastAcceptedEventID = nil
@@ -316,7 +349,9 @@ final class SessionEventStreamCoordinator {
                     profile: self.profile,
                     sessionID: self.sessionID
                 )
-                _ = self.onSnapshot?(snapshot)
+                // Reconnect without Last-Event-ID. A snapshot is the server's
+                // explicit signal that incremental replay is no longer safe.
+                self.scheduleReconnect(connectionGeneration: connectionGeneration)
             } else {
                 if case .transportError = event {
                     // Keep the attempt counter so an older Hermes server that
@@ -326,7 +361,8 @@ final class SessionEventStreamCoordinator {
                 } else {
                     self.reconnectAttempt = 0
                 }
-                if let eventID = Self.normalizedEventID(eventID) {
+                if Self.shouldAdvanceCursor(for: event),
+                   let eventID = Self.normalizedEventID(eventID) {
                     guard !self.seenEventIDs.contains(eventID) else { return }
                     self.lastAcceptedEventID = eventID
                     self.remember(eventID: eventID, persist: false)
@@ -383,6 +419,17 @@ final class SessionEventStreamCoordinator {
             return true
         default:
             return false
+        }
+    }
+
+    private static func shouldAdvanceCursor(for event: SSEEvent) -> Bool {
+        switch event {
+        case .ignored:
+            // The decoder could not establish a valid event payload. Advancing
+            // past its ID would make an authoritative replay permanently skip it.
+            return false
+        default:
+            return true
         }
     }
 

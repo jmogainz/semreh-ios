@@ -215,7 +215,7 @@ struct SessionListView: View {
                         await openPendingDeepLinkedSessionIfNeeded()
                     },
                     refreshSessionsAndActiveProfile: {
-                        await refreshSessionsAndActiveProfile()
+                        await refreshSessionsAndActiveProfile(reconcileOpenTranscripts: true)
                     },
                     restoreLastSelectedSession: { clearsMissingSelection in
                         restoreLastSelectedSessionIfNeeded(
@@ -239,7 +239,7 @@ struct SessionListView: View {
 
                 foregroundRefreshTask?.cancel()
                 foregroundRefreshTask = Task { @MainActor in
-                    await refreshSessionsAndActiveProfile()
+                    await refreshSessionsAndActiveProfile(reconcileOpenTranscripts: true)
                     guard !Task.isCancelled, scenePhase == .active else { return }
                 }
             }
@@ -255,7 +255,7 @@ struct SessionListView: View {
             }
             .task(id: returnRefreshID) {
                 guard returnRefreshID != nil else { return }
-                await refreshSessionsAndActiveProfile()
+                await refreshSessionsAndActiveProfile(reconcileOpenTranscripts: true)
             }
             .onAppear {
                 openPendingSharedImportIfNeeded()

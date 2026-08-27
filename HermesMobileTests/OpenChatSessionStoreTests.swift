@@ -90,6 +90,33 @@ final class OpenChatSessionStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testOpaqueEventIDsAdvanceInServerDeliveryOrder() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "goku.session-event-order-\(UUID().uuidString)"))
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let streamClient = SpySSEStreamingClient()
+        let cursorStore = SessionEventCursorStore(defaults: defaults)
+        let coordinator = SessionEventStreamCoordinator(
+            server: server,
+            sessionID: "session-abc",
+            profile: nil,
+            streamClient: streamClient,
+            userDefaults: defaults
+        )
+        coordinator.start()
+        let connection = streamClient.startedURLs.count - 1
+        streamClient.emit(.token("first"), lastEventID: "journal:10", onConnection: connection)
+        // Event IDs are opaque. Even though this looks numerically lower, the
+        // server delivered it later, so it becomes the resume point.
+        streamClient.emit(.token("second"), lastEventID: "journal:8", onConnection: connection)
+        coordinator.stop()
+
+        XCTAssertEqual(
+            cursorStore.load(server: server, profile: nil, sessionID: "session-abc"),
+            "journal:8"
+        )
+    }
+
+    @MainActor
     func testSidebarRefreshReconcilesOpenTranscriptFromCanonicalServer() async throws {
         var sessionFetches = 0
         let viewModel = try makeViewModel(sessionID: "session-abc") { request in
@@ -543,6 +570,103 @@ final class OpenChatSessionStoreTests: XCTestCase {
         streamClient.emit(.transportError("late"), lastEventID: nil, onConnection: 1)
         try await Task.sleep(nanoseconds: 350_000_000)
         XCTAssertEqual(streamClient.startedURLs.count, 2)
+    }
+
+    @MainActor
+    func testSessionEventCoordinatorReconnectsAfterAcceptedSnapshotWithoutCursor() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "semreh.session-event-snapshot-reconnect-\(UUID().uuidString)"))
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let streamClient = SpySSEStreamingClient()
+        let coordinator = SessionEventStreamCoordinator(
+            server: server,
+            sessionID: "session-abc",
+            profile: nil,
+            streamClient: streamClient,
+            userDefaults: defaults
+        )
+        coordinator.onSnapshot = { _ in true }
+
+        coordinator.start()
+        streamClient.emit(
+            .sessionSnapshot(SessionSummary(sessionId: "session-abc", title: "Recovered")),
+            lastEventID: "journal:42"
+        )
+
+        try await Task.sleep(nanoseconds: 350_000_000)
+        XCTAssertEqual(streamClient.startedURLs.count, 2)
+        XCTAssertNil(streamClient.resumeEventIDs.last ?? nil)
+        coordinator.stop()
+    }
+
+    @MainActor
+    func testRejectedSnapshotDoesNotClearDurableCursor() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "semreh.session-event-rejected-\(UUID().uuidString)"))
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let streamClient = SpySSEStreamingClient()
+        let cursorStore = SessionEventCursorStore(defaults: defaults)
+        cursorStore.save(
+            eventID: "journal:41",
+            server: server,
+            profile: nil,
+            sessionID: "session-abc"
+        )
+        let coordinator = SessionEventStreamCoordinator(
+            server: server,
+            sessionID: "session-abc",
+            profile: nil,
+            streamClient: streamClient,
+            userDefaults: defaults
+        )
+        coordinator.onSnapshot = { _ in false }
+
+        coordinator.start()
+        streamClient.emit(
+            .sessionSnapshot(SessionSummary(sessionId: "session-abc", title: "Rejected")),
+            lastEventID: "journal:42"
+        )
+        coordinator.stop()
+
+        XCTAssertEqual(
+            cursorStore.load(server: server, profile: nil, sessionID: "session-abc"),
+            "journal:41"
+        )
+        XCTAssertEqual(streamClient.startedURLs.count, 1)
+    }
+
+    @MainActor
+    func testOverlappingOpenSessionRefreshesShareOneCanonicalLoad() async throws {
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let viewModel = try makeViewModel(sessionID: "session-abc") { request in
+            XCTAssertEqual(request.url?.path, "/api/session")
+            return apiTestJSONResponse("""
+            {
+              "session": {
+                "session_id": "session-abc",
+                "messages": [
+                  {"role": "user", "content": "Canonical", "message_id": "canonical-1", "timestamp": 1770000000}
+                ]
+              }
+            }
+            """, for: request)
+        }
+        _ = OpenChatSessionStore.shared.adoptedViewModel(
+            session: SessionSummary(sessionId: "session-abc"),
+            server: server,
+            creating: viewModel
+        )
+
+        let first = Task { @MainActor in
+            await OpenChatSessionStore.shared.refreshOpenSessions(for: server)
+        }
+        let second = Task { @MainActor in
+            await OpenChatSessionStore.shared.refreshOpenSessions(for: server)
+        }
+
+        let firstCount = await first.value
+        let secondCount = await second.value
+        XCTAssertEqual(firstCount, 1)
+        XCTAssertEqual(secondCount, 1)
+        XCTAssertEqual(viewModel.messages.map(\.content), ["Canonical"])
     }
 
     @MainActor
