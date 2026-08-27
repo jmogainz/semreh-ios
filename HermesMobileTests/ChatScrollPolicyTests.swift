@@ -12,6 +12,64 @@ final class ChatScrollPolicyTests: XCTestCase {
             .bottom
         )
         XCTAssertNil(ChatScrollPolicy.sizeChangeAnchor(shouldFollowLatestMessage: false))
+        XCTAssertNil(
+            ChatScrollPolicy.sizeChangeAnchor(
+                shouldFollowLatestMessage: true,
+                isComposerResizing: true
+            )
+        )
+    }
+
+    func testVisibleTranscriptPolicyChoosesTopmostPartiallyVisibleRow() {
+        let frames = [
+            "row-above": CGRect(x: 0, y: -120, width: 300, height: 80),
+            "row-visible": CGRect(x: 0, y: -20, width: 300, height: 100),
+            "row-later": CGRect(x: 0, y: 90, width: 300, height: 100),
+            "row-below": CGRect(x: 0, y: 420, width: 300, height: 100)
+        ]
+
+        XCTAssertEqual(
+            ChatTranscriptVisibilityPolicy.firstVisibleMessageID(
+                frames: frames,
+                viewportHeight: 400
+            ),
+            "row-visible"
+        )
+    }
+
+    func testVisibleTranscriptPolicyReturnsNilWhenNoRowIntersectsViewport() {
+        let frames = [
+            "row-above": CGRect(x: 0, y: -120, width: 300, height: 80),
+            "row-below": CGRect(x: 0, y: 420, width: 300, height: 100)
+        ]
+
+        XCTAssertNil(
+            ChatTranscriptVisibilityPolicy.firstVisibleMessageID(
+                frames: frames,
+                viewportHeight: 400
+            )
+        )
+    }
+
+    func testComposerResizeOnlyRejoinsLatestWhenReaderStillFollowsBottom() {
+        XCTAssertTrue(
+            ChatScrollPolicy.shouldFollowAfterComposerResize(
+                wasFollowingLatest: true,
+                isUserInteracting: false
+            )
+        )
+        XCTAssertFalse(
+            ChatScrollPolicy.shouldFollowAfterComposerResize(
+                wasFollowingLatest: false,
+                isUserInteracting: false
+            )
+        )
+        XCTAssertFalse(
+            ChatScrollPolicy.shouldFollowAfterComposerResize(
+                wasFollowingLatest: true,
+                isUserInteracting: true
+            )
+        )
     }
 
     func testInitialAsyncWorkWaitsForNavigationAppearanceCompletion() {
@@ -31,6 +89,30 @@ final class ChatScrollPolicyTests: XCTestCase {
     func testKnownStreamIDWithoutTranscriptStillReloadsHistory() {
         XCTAssertTrue(
             ChatInitialAppearancePolicy.shouldReloadTranscriptOnAppear(hasPreservedTranscript: false)
+        )
+    }
+
+    func testNewViewModelStillReconcilesAfterPaintingCachedRows() {
+        XCTAssertTrue(
+            ChatInitialAppearancePolicy.shouldReloadTranscriptOnAppear(
+                hasPreservedTranscript: true,
+                wasReusedFromOpenSessionStore: false
+            )
+        )
+    }
+
+    func testReusedWarmViewModelCanSkipColdOpenReload() {
+        XCTAssertFalse(
+            ChatInitialAppearancePolicy.shouldReloadTranscriptOnAppear(
+                hasPreservedTranscript: true,
+                wasReusedFromOpenSessionStore: true
+            )
+        )
+        XCTAssertTrue(
+            ChatInitialAppearancePolicy.shouldReloadTranscriptOnAppear(
+                hasPreservedTranscript: false,
+                wasReusedFromOpenSessionStore: true
+            )
         )
     }
 

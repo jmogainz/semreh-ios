@@ -16,8 +16,22 @@ enum ChatScrollPolicy {
     /// Rich Markdown can finish measuring after the scroll view's initial
     /// layout. Keep those size changes bottom-pinned only while the app still
     /// owns follow-latest intent; return nil as soon as the reader scrolls away.
-    static func sizeChangeAnchor(shouldFollowLatestMessage: Bool) -> UnitPoint? {
-        shouldFollowLatestMessage ? .bottom : nil
+    static func sizeChangeAnchor(
+        shouldFollowLatestMessage: Bool,
+        isComposerResizing: Bool = false
+    ) -> UnitPoint? {
+        guard !isComposerResizing else { return nil }
+        return shouldFollowLatestMessage ? .bottom : nil
+    }
+
+    /// A composer resize is a viewport change, not new transcript content. Preserve
+    /// a reader's position during the resize; only re-pin a user who was already
+    /// following the latest content and is not actively dragging the transcript.
+    static func shouldFollowAfterComposerResize(
+        wasFollowingLatest: Bool,
+        isUserInteracting: Bool
+    ) -> Bool {
+        wasFollowingLatest && !isUserInteracting
     }
 
     /// Distance (pt) from the bottom within which we treat the transcript as
@@ -108,6 +122,31 @@ enum ChatScrollPolicy {
     }
 }
 
+/// Chooses the durable transcript row to use when reopening after the user has
+/// read away from the latest message. Frames come only from currently realized
+/// LazyVStack rows, so this stays bounded to the visible window rather than
+/// walking the entire transcript.
+enum ChatTranscriptVisibilityPolicy {
+    static func firstVisibleMessageID(
+        frames: [String: CGRect],
+        viewportHeight: CGFloat
+    ) -> String? {
+        guard viewportHeight > 0 else { return nil }
+
+        return frames
+            .filter { _, frame in
+                frame.height > 0 && frame.maxY > 0 && frame.minY < viewportHeight
+            }
+            .min { lhs, rhs in
+                if lhs.value.minY == rhs.value.minY {
+                    return lhs.key < rhs.key
+                }
+                return lhs.value.minY < rhs.value.minY
+            }?
+            .key
+    }
+}
+
 /// Keeps transcript reconciliation and other state-heavy startup work out of
 /// the system navigation transition. Cache preparation remains synchronous so
 /// an available transcript can participate in the destination's first layout.
@@ -118,6 +157,21 @@ enum ChatInitialAppearancePolicy {
 
     static func shouldReloadTranscriptOnAppear(hasPreservedTranscript: Bool) -> Bool {
         !hasPreservedTranscript
+    }
+
+    /// A newly created view model may paint cached rows before its first
+    /// authoritative network load. Those rows are not proof that the model is
+    /// warm; only a model reused from `OpenChatSessionStore` can skip the cold
+    /// open reconciliation.
+    static func shouldReloadTranscriptOnAppear(
+        hasPreservedTranscript: Bool,
+        wasReusedFromOpenSessionStore: Bool
+    ) -> Bool {
+        if wasReusedFromOpenSessionStore {
+            return !hasPreservedTranscript
+        }
+
+        return true
     }
 }
 
