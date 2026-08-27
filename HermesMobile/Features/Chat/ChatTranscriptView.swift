@@ -1,6 +1,14 @@
 import SwiftUI
 import UIKit
 
+private struct VisibleTranscriptRowFramesKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, newValue in newValue })
+    }
+}
+
 struct ChatTranscriptView: View, Equatable {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -60,6 +68,7 @@ struct ChatTranscriptView: View, Equatable {
     let onScrollToLatestTranscriptMessage: (ScrollViewProxy) -> Void
     let onScrollToLatestContent: (ScrollViewProxy, Bool) -> Void
     var onScrollToTranscriptMessage: (ScrollViewProxy, String, Bool) -> Void = { _, _, _ in }
+    var onVisibleTranscriptRowIDChange: (String?) -> Void = { _ in }
     let onPreviewAttachment: (MessageAttachment, Data?) -> Void
     let onPreviewTranscriptMedia: (TranscriptMediaReference) -> Void
     let onToggleListening: (MessageActionContext) -> Void
@@ -83,6 +92,9 @@ struct ChatTranscriptView: View, Equatable {
     var followRejoinScrollToken: Int = 0
     var isComposerResizing = false
     var transcriptRenderRevision = 0
+
+    @State private var trackedVisibleTranscriptRowID: String?
+    private static let transcriptCoordinateSpaceName = "chatTranscript"
 
     var body: some View {
         if isLoading && messages.isEmpty && clarificationPrompt == nil {
@@ -147,6 +159,7 @@ struct ChatTranscriptView: View, Equatable {
                         }
                     }
                     .scrollDismissesKeyboard(.interactively)
+                    .coordinateSpace(name: Self.transcriptCoordinateSpaceName)
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         Color.clear
                             .frame(height: transcriptBottomInsetHeight)
@@ -208,6 +221,15 @@ struct ChatTranscriptView: View, Equatable {
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                     guard shouldFollowLatestMessage, isScrolledNearBottom else { return }
                     onScrollToLatestContent(proxy, false)
+                }
+                .onPreferenceChange(VisibleTranscriptRowFramesKey.self) { frames in
+                    let visibleID = ChatTranscriptVisibilityPolicy.firstVisibleMessageID(
+                        frames: frames,
+                        viewportHeight: viewport.size.height
+                    )
+                    guard trackedVisibleTranscriptRowID != visibleID else { return }
+                    trackedVisibleTranscriptRowID = visibleID
+                    onVisibleTranscriptRowIDChange(visibleID)
                 }
             }
         }
@@ -272,6 +294,18 @@ struct ChatTranscriptView: View, Equatable {
                     onCopy: onCopy
                 )
                 .equatable()
+                .background {
+                    GeometryReader { rowProxy in
+                        Color.clear.preference(
+                            key: VisibleTranscriptRowFramesKey.self,
+                            value: [
+                                transcriptMessage.renderID: rowProxy.frame(
+                                    in: .named(Self.transcriptCoordinateSpaceName)
+                                )
+                            ]
+                        )
+                    }
+                }
                 .id(transcriptMessage.renderID)
 
                 if let compressionReferenceCard,

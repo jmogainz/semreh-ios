@@ -122,6 +122,31 @@ enum ChatScrollPolicy {
     }
 }
 
+/// Chooses the durable transcript row to use when reopening after the user has
+/// read away from the latest message. Frames come only from currently realized
+/// LazyVStack rows, so this stays bounded to the visible window rather than
+/// walking the entire transcript.
+enum ChatTranscriptVisibilityPolicy {
+    static func firstVisibleMessageID(
+        frames: [String: CGRect],
+        viewportHeight: CGFloat
+    ) -> String? {
+        guard viewportHeight > 0 else { return nil }
+
+        return frames
+            .filter { _, frame in
+                frame.height > 0 && frame.maxY > 0 && frame.minY < viewportHeight
+            }
+            .min { lhs, rhs in
+                if lhs.value.minY == rhs.value.minY {
+                    return lhs.key < rhs.key
+                }
+                return lhs.value.minY < rhs.value.minY
+            }?
+            .key
+    }
+}
+
 /// Keeps transcript reconciliation and other state-heavy startup work out of
 /// the system navigation transition. Cache preparation remains synchronous so
 /// an available transcript can participate in the destination's first layout.

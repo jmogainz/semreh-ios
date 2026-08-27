@@ -303,6 +303,7 @@ struct ChatView: View {
     @State private var isScrolledNearBottom = true
     @State private var isReadingOlderTranscript = false
     @State private var shouldFollowLatestMessage = true
+    @State private var visibleTranscriptRowID: String?
     @State private var followScrollGeneration = 0
     @State private var isUserInteractingWithScroll = false
     @State private var userScrollCooldownUntil: Date?
@@ -1198,6 +1199,10 @@ struct ChatView: View {
             },
             onScrollToTranscriptMessage: { proxy, messageID, animated in
                 scrollToTranscriptMessage(proxy, messageID: messageID, animated: animated)
+            },
+            onVisibleTranscriptRowIDChange: { rowID in
+                guard visibleTranscriptRowID != rowID else { return }
+                visibleTranscriptRowID = rowID
             },
             onPreviewAttachment: { attachment, localData in
                 presentPreviewRestoringComposerFocusIfNeeded {
@@ -2286,10 +2291,10 @@ struct ChatView: View {
     private func persistTranscriptRestore() {
         viewModel.rememberTranscriptRestorePoint(
             followingLatest: shouldFollowLatestMessage,
-            // Keep high-frequency scroll position out of ChatView state. The
-            // ScrollViewReader restore path still handles latest-content
-            // restoration without a per-scroll binding.
-            visibleMessageID: nil
+            // Persist only the row identity, not the high-frequency scroll offset.
+            // Reopening a reader's position then uses the same stable render ID
+            // without adding a scroll-position binding to ChatView.
+            visibleMessageID: visibleTranscriptRowID
         )
     }
 

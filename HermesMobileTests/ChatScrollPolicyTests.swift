@@ -20,6 +20,37 @@ final class ChatScrollPolicyTests: XCTestCase {
         )
     }
 
+    func testVisibleTranscriptPolicyChoosesTopmostPartiallyVisibleRow() {
+        let frames = [
+            "row-above": CGRect(x: 0, y: -120, width: 300, height: 80),
+            "row-visible": CGRect(x: 0, y: -20, width: 300, height: 100),
+            "row-later": CGRect(x: 0, y: 90, width: 300, height: 100),
+            "row-below": CGRect(x: 0, y: 420, width: 300, height: 100)
+        ]
+
+        XCTAssertEqual(
+            ChatTranscriptVisibilityPolicy.firstVisibleMessageID(
+                frames: frames,
+                viewportHeight: 400
+            ),
+            "row-visible"
+        )
+    }
+
+    func testVisibleTranscriptPolicyReturnsNilWhenNoRowIntersectsViewport() {
+        let frames = [
+            "row-above": CGRect(x: 0, y: -120, width: 300, height: 80),
+            "row-below": CGRect(x: 0, y: 420, width: 300, height: 100)
+        ]
+
+        XCTAssertNil(
+            ChatTranscriptVisibilityPolicy.firstVisibleMessageID(
+                frames: frames,
+                viewportHeight: 400
+            )
+        )
+    }
+
     func testComposerResizeOnlyRejoinsLatestWhenReaderStillFollowsBottom() {
         XCTAssertTrue(
             ChatScrollPolicy.shouldFollowAfterComposerResize(
