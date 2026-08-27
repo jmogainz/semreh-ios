@@ -209,6 +209,10 @@ final class ChatViewModel {
     private(set) var messages: [ChatMessage] = [] {
         didSet {
             transcriptRenderRevision &+= 1
+            guard transcriptDerivedStateBatchDepth == 0 else {
+                transcriptDerivedStateNeedsRecompute = true
+                return
+            }
             if let index = incrementalTranscriptMessageIndex {
                 incrementalTranscriptMessageIndex = nil
                 replaceDisplayedTranscriptMessage(at: index)
@@ -220,6 +224,11 @@ final class ChatViewModel {
     /// Memoized transcript mapping, recomputed once whenever `messages` or
     /// `messagesOffset` changes. Views read this single cached value instead of
     /// re-running the full classification pass on every body evaluation.
+    @ObservationIgnored private var transcriptDerivedStateBatchDepth = 0
+    @ObservationIgnored private var transcriptDerivedStateNeedsRecompute = false
+#if DEBUG
+    private(set) var transcriptDerivedStateRecomputeCountForTesting = 0
+#endif
     private(set) var displayedTranscriptMessages: [TranscriptMessage] = []
     @ObservationIgnored private var displayedTranscriptRowIndexByLoadedIndex: [Int: Int] = [:]
     private(set) var isLoading = false
@@ -330,6 +339,22 @@ final class ChatViewModel {
         return calls
     }
 
+    private func withBatchedTranscriptDerivedState(_ update: () -> Void) {
+        transcriptDerivedStateBatchDepth += 1
+        update()
+        transcriptDerivedStateBatchDepth -= 1
+
+        guard transcriptDerivedStateBatchDepth == 0,
+              transcriptDerivedStateNeedsRecompute
+        else {
+            return
+        }
+
+        transcriptDerivedStateNeedsRecompute = false
+        incrementalTranscriptMessageIndex = nil
+        recomputeDisplayedTranscriptMessages()
+    }
+
     private func replaceStreamingMessage(at index: Int, with message: ChatMessage) {
         incrementalTranscriptMessageIndex = index
         messages[index] = message
@@ -366,6 +391,9 @@ final class ChatViewModel {
     }
 
     private func recomputeDisplayedTranscriptMessages() {
+#if DEBUG
+        transcriptDerivedStateRecomputeCountForTesting += 1
+#endif
         displayedTranscriptMessages = Self.transcriptMessages(
             from: messages,
             messageOffset: messagesOffset
@@ -436,6 +464,10 @@ final class ChatViewModel {
     private(set) var messagesOffset = 0 {
         didSet {
             transcriptRenderRevision &+= 1
+            guard transcriptDerivedStateBatchDepth == 0 else {
+                transcriptDerivedStateNeedsRecompute = true
+                return
+            }
             recomputeDisplayedTranscriptMessages()
         }
     }
@@ -468,6 +500,9 @@ final class ChatViewModel {
     private var reasoningGatingFetchToken = 0
     /// Drops an effort-write response after a newer effort selection starts.
     private var reasoningSelectionToken = 0
+    /// Shared configuration mutation generation. Model and reasoning writes are
+    /// optimistic, so a late response must never roll back a newer visible choice.
+    private var composerConfigurationMutationToken = 0
     var showsReasoningEffortControl: Bool {
         ReasoningEffortOption.showsEffortControl(
             supportsReasoningEffort: supportsReasoningEffort,
@@ -1136,10 +1171,26 @@ final class ChatViewModel {
             return false
         }
 
+        let previousModel = currentModel
+        let previousProvider = currentModelProvider
+        let previousWorkspace = currentWorkspace
+        let previousPendingExplicitModelPick = pendingExplicitModelPick
+        composerConfigurationMutationToken &+= 1
+        let mutationToken = composerConfigurationMutationToken
+
+        // Update the chip immediately. Sending remains disabled for the short
+        // persistence window, while rollback below restores the exact prior
+        // selection if the server rejects the change.
+        currentModel = option.id
+        currentModelProvider = option.providerID
         isUpdatingComposerConfiguration = true
         composerConfigurationErrorMessage = nil
         lastError = nil
-        defer { isUpdatingComposerConfiguration = false }
+        defer {
+            if composerConfigurationMutationToken == mutationToken {
+                isUpdatingComposerConfiguration = false
+            }
+        }
 
         do {
             let response = try await client.updateSession(
@@ -1149,6 +1200,11 @@ final class ChatViewModel {
                 modelProvider: option.providerID
             )
 
+            guard composerConfigurationMutationToken == mutationToken,
+                  currentModel == option.id,
+                  currentModelProvider == option.providerID
+            else { return false }
+
             currentModel = response.session?.model ?? option.id
             currentModelProvider = response.session?.modelProvider ?? option.providerID
             currentWorkspace = response.session?.workspace ?? currentWorkspace
@@ -1157,8 +1213,14 @@ final class ChatViewModel {
             // effort menu stays disabled until the new model's gating lands —
             // no interactable flash of the previous model's options (issue #18).
             await refreshReasoningEffortGating()
+            guard composerConfigurationMutationToken == mutationToken else { return false }
             return true
         } catch {
+            guard composerConfigurationMutationToken == mutationToken else { return false }
+            currentModel = previousModel
+            currentModelProvider = previousProvider
+            currentWorkspace = previousWorkspace
+            pendingExplicitModelPick = previousPendingExplicitModelPick
             lastError = error
             composerConfigurationErrorMessage = error.localizedDescription
             return false
@@ -1424,18 +1486,44 @@ final class ChatViewModel {
             return false
         }
 
-        isUpdatingComposerConfiguration = true
-        composerConfigurationErrorMessage = nil
-        lastError = nil
-        defer { isUpdatingComposerConfiguration = false }
-
-        reasoningSelectionToken &+= 1
-        let selectionToken = reasoningSelectionToken
+        let previousSelectedReasoningEffort = selectedReasoningEffort
+        let previousSessionReasoningEffort = sessionReasoningEffort
+        let previousSessionScopedReasoning = sessionScopedReasoning
         let expectedSessionID = canonicalSessionID
         let expectedModel = currentModel
         let expectedProvider = currentModelProvider
+        composerConfigurationMutationToken &+= 1
+        let mutationToken = composerConfigurationMutationToken
+
+        // Reflect the selection immediately. The composer is disabled only while
+        // persistence is in flight; a failed request restores the prior effective
+        // value and raw session override below.
+        if clearsSessionOverride {
+            sessionReasoningEffort = nil
+        } else if sessionScopedReasoning == true {
+            sessionReasoningEffort = selectedEffort
+        } else {
+            selectedReasoningEffort = selectedEffort
+        }
+
+        isUpdatingComposerConfiguration = true
+        composerConfigurationErrorMessage = nil
+        lastError = nil
+        defer {
+            if composerConfigurationMutationToken == mutationToken {
+                isUpdatingComposerConfiguration = false
+            }
+        }
+
+        reasoningSelectionToken &+= 1
+        let selectionToken = reasoningSelectionToken
         if sessionScopedReasoning == true && expectedSessionID == nil {
-            composerConfigurationErrorMessage = String(localized: "The server did not provide a session ID.")
+            if composerConfigurationMutationToken == mutationToken {
+                selectedReasoningEffort = previousSelectedReasoningEffort
+                sessionReasoningEffort = previousSessionReasoningEffort
+                sessionScopedReasoning = previousSessionScopedReasoning
+                composerConfigurationErrorMessage = String(localized: "The server did not provide a session ID.")
+            }
             return false
         }
 
@@ -1446,6 +1534,7 @@ final class ChatViewModel {
                 sessionID: sessionScopedReasoning == true ? expectedSessionID : nil
             )
             guard selectionToken == reasoningSelectionToken,
+                  composerConfigurationMutationToken == mutationToken,
                   expectedSessionID == canonicalSessionID,
                   expectedModel == currentModel,
                   expectedProvider == currentModelProvider
@@ -1458,6 +1547,10 @@ final class ChatViewModel {
                 ?? (clearsSessionOverride ? selectedReasoningEffort : selectedEffort)
             return true
         } catch {
+            guard composerConfigurationMutationToken == mutationToken else { return false }
+            selectedReasoningEffort = previousSelectedReasoningEffort
+            sessionReasoningEffort = previousSessionReasoningEffort
+            sessionScopedReasoning = previousSessionScopedReasoning
             lastError = error
             composerConfigurationErrorMessage = error.localizedDescription
             return false
@@ -1650,12 +1743,14 @@ final class ChatViewModel {
                     )
                     if !cachedMessages.isEmpty {
                         clearCompressionAnchorMetadata()
-                        messages = cachedMessages
+                        withBatchedTranscriptDerivedState {
+                            messages = cachedMessages
+                            messagesOffset = 0
+                        }
                         latestServerLoadHadAssistantResponseAfterLatestUser = Self.hasAssistantResponseAfterLatestUser(
                             in: messages
                         )
                         responseCompletionNeedsTranscriptRefresh = false
-                        messagesOffset = 0
                         hasOlderMessages = false
                         isViewingCachedData = true
                         contextWindowSnapshot = nil
@@ -1743,8 +1838,10 @@ final class ChatViewModel {
             messagesBeforeCacheFirstPlaceholder = messages
             messagesOffsetBeforeCacheFirstPlaceholder = messagesOffset
         }
-        messages = cachedMessages
-        messagesOffset = 0
+        withBatchedTranscriptDerivedState {
+            messages = cachedMessages
+            messagesOffset = 0
+        }
         hasOlderMessages = false
         isViewingCachedData = false
         cacheFirstMessagePlaceholder = cachedMessages
@@ -1762,8 +1859,10 @@ final class ChatViewModel {
         guard let cacheFirstMessagePlaceholder,
               messages == cacheFirstMessagePlaceholder
         else { return }
-        messages = messagesBeforeCacheFirstPlaceholder
-        messagesOffset = messagesOffsetBeforeCacheFirstPlaceholder
+        withBatchedTranscriptDerivedState {
+            messages = messagesBeforeCacheFirstPlaceholder
+            messagesOffset = messagesOffsetBeforeCacheFirstPlaceholder
+        }
         hasOlderMessages = messagesOffsetBeforeCacheFirstPlaceholder > 0
     }
 
@@ -1813,12 +1912,14 @@ final class ChatViewModel {
             let mergedMessages = Self.prependingOlderMessages(olderMessages, to: messages)
             let didAddMessages = mergedMessages.count > messages.count
             applyCompressionAnchorMetadata(from: session)
-            messages = mergedMessages
+            withBatchedTranscriptDerivedState {
+                messages = mergedMessages
+                updateOlderMessagePagination(from: session, loadedMessageCount: mergedMessages.count)
+            }
             latestServerLoadHadAssistantResponseAfterLatestUser = Self.hasAssistantResponseAfterLatestUser(
                 in: messages
             )
             responseCompletionNeedsTranscriptRefresh = false
-            updateOlderMessagePagination(from: session, loadedMessageCount: messages.count)
             isViewingCachedData = false
             contextWindowSnapshot = ContextWindowSnapshot(
                 contextLength: session.contextLength,
@@ -1941,14 +2042,18 @@ final class ChatViewModel {
             currentMessagesOffset: previousMessagesOffset,
             reloadedMessagesOffset: reloadedMessagesOffset
         ) {
-            messages = expandedMessages
-            messagesOffset = previousMessagesOffset
+            withBatchedTranscriptDerivedState {
+                messages = expandedMessages
+                messagesOffset = previousMessagesOffset
+            }
             hasOlderMessages = previousMessagesOffset > 0
             return
         }
 
-        messages = reloadedMessages
-        updateOlderMessagePagination(from: session, loadedMessageCount: messages.count)
+        withBatchedTranscriptDerivedState {
+            messages = reloadedMessages
+            updateOlderMessagePagination(from: session, loadedMessageCount: reloadedMessages.count)
+        }
     }
 
     nonisolated private static func mergingReloadedMessages(
@@ -2659,8 +2764,10 @@ final class ChatViewModel {
         cancelPendingStreamingScrollTrigger()
         resetPendingStreamingContentBuffers()
         clearCompressionAnchorMetadata()
-        messages = []
-        messagesOffset = 0
+        withBatchedTranscriptDerivedState {
+            messages = []
+            messagesOffset = 0
+        }
         hasOlderMessages = false
         setCompletedToolCallGroups([])
         completedReasoningGroups = []
@@ -3370,8 +3477,10 @@ final class ChatViewModel {
             }
 
             applyCompressionAnchorMetadata(from: session)
-            messages = session.messages ?? []
-            updateOlderMessagePagination(from: session, loadedMessageCount: messages.count)
+            withBatchedTranscriptDerivedState {
+                messages = session.messages ?? []
+                updateOlderMessagePagination(from: session, loadedMessageCount: messages.count)
+            }
             isViewingCachedData = false
             let snapshot = ContextWindowSnapshot(
                 contextLength: session.contextLength,
@@ -3513,8 +3622,10 @@ final class ChatViewModel {
                 messageLimit: Self.messagePageLimit
             )
             if let session = sessionResponse.session {
-                messages = session.messages ?? []
-                updateOlderMessagePagination(from: session, loadedMessageCount: messages.count)
+                withBatchedTranscriptDerivedState {
+                    messages = session.messages ?? []
+                    updateOlderMessagePagination(from: session, loadedMessageCount: messages.count)
+                }
                 setCompletedToolCallGroups(ToolCallGroup.groups(
                     persistedToolCalls: session.toolCalls ?? [],
                     messages: messages,
@@ -3771,8 +3882,10 @@ final class ChatViewModel {
 
             // Update local state from the truncated response
             if let session = truncateResponse.session {
-                messages = session.messages ?? []
-                updateOlderMessagePagination(from: session, loadedMessageCount: messages.count)
+                withBatchedTranscriptDerivedState {
+                    messages = session.messages ?? []
+                    updateOlderMessagePagination(from: session, loadedMessageCount: messages.count)
+                }
                 setCompletedToolCallGroups(ToolCallGroup.groups(
                     persistedToolCalls: session.toolCalls ?? [],
                     messages: messages,
@@ -3875,8 +3988,10 @@ final class ChatViewModel {
             )
 
             if let session = truncateResponse.session {
-                messages = session.messages ?? []
-                updateOlderMessagePagination(from: session, loadedMessageCount: messages.count)
+                withBatchedTranscriptDerivedState {
+                    messages = session.messages ?? []
+                    updateOlderMessagePagination(from: session, loadedMessageCount: messages.count)
+                }
                 setCompletedToolCallGroups(ToolCallGroup.groups(
                     persistedToolCalls: session.toolCalls ?? [],
                     messages: messages,
@@ -4213,9 +4328,13 @@ final class ChatViewModel {
         else { return nil }
 
         let merge = Self.mergingLoadedMessages(messages, withActiveStreamSnapshot: snapshot)
-        messages = merge.messages
+        withBatchedTranscriptDerivedState {
+            messages = merge.messages
+            if merge.usedSnapshotMessagesOffset {
+                messagesOffset = snapshot.messagesOffset
+            }
+        }
         if merge.usedSnapshotMessagesOffset {
-            messagesOffset = snapshot.messagesOffset
             hasOlderMessages = snapshot.messagesOffset > 0
         }
         displayTitle = displayTitle.isEmpty ? snapshot.displayTitle : displayTitle

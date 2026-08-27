@@ -1916,7 +1916,7 @@ struct ChatView: View {
         }
     }
 
-    private func pastedImageFilename(suggestedName: String? = nil) -> String {
+    nonisolated private func pastedImageFilename(suggestedName: String? = nil) -> String {
         if let suggestedName,
            !suggestedName.isEmpty,
            !URL(fileURLWithPath: suggestedName).pathExtension.isEmpty {
@@ -1926,7 +1926,7 @@ struct ChatView: View {
         return "image_\(Int(Date().timeIntervalSince1970))_\(UUID().uuidString.prefix(4)).jpg"
     }
 
-    private func pastedFileURL(from item: NSSecureCoding?) -> URL? {
+    nonisolated private func pastedFileURL(from item: NSSecureCoding?) -> URL? {
         if let url = item as? URL {
             return url
         }

@@ -869,6 +869,74 @@ final class SessionListMutationTests: XCTestCase {
     }
 
     @MainActor
+    func testDeleteRemovesRowBeforeServerAcknowledgementAndKeepsItGoneAfterSuccess() async throws {
+        let mutationStarted = expectation(description: "delete request started")
+        let releaseMutation = DispatchSemaphore(value: 0)
+        var sessionLoadCount = 0
+        let viewModel = try makeViewModel { request in
+            switch request.url?.path {
+            case "/api/sessions":
+                sessionLoadCount += 1
+                let body = sessionLoadCount == 1
+                    ? #"{"sessions":[{"session_id":"delete-me","title":"Delete me","archived":false},{"session_id":"keep-me","title":"Keep me","archived":false}]}"#
+                    : #"{"sessions":[{"session_id":"keep-me","title":"Keep me","archived":false}]}"#
+                return apiTestJSONResponse(body, for: request)
+            case "/api/session/delete":
+                mutationStarted.fulfill()
+                releaseMutation.wait()
+                return apiTestJSONResponse(#"{"ok":true}"#, for: request)
+            default:
+                XCTFail("Unexpected request path: \(request.url?.path ?? "nil")")
+                throw URLError(.badURL)
+            }
+        }
+
+        await viewModel.load()
+        let session = try XCTUnwrap(viewModel.sessions.first(where: { $0.sessionId == "delete-me" }))
+        let deleteTask = Task { @MainActor in
+            await viewModel.delete(session)
+        }
+        await fulfillment(of: [mutationStarted], timeout: 2)
+
+        XCTAssertEqual(viewModel.sessions.compactMap(\.sessionId), ["keep-me"])
+        XCTAssertTrue(viewModel.isMutating(session))
+
+        releaseMutation.signal()
+        let didDelete = await deleteTask.value
+        XCTAssertTrue(didDelete)
+        XCTAssertFalse(viewModel.isMutating(session))
+        XCTAssertEqual(viewModel.sessions.compactMap(\.sessionId), ["keep-me"])
+    }
+
+    @MainActor
+    func testDeleteFailureRestoresTheExactRowAndOrder() async throws {
+        var sessionLoadCount = 0
+        let viewModel = try makeViewModel { request in
+            switch request.url?.path {
+            case "/api/sessions":
+                sessionLoadCount += 1
+                XCTAssertEqual(sessionLoadCount, 1)
+                return apiTestJSONResponse(#"{"sessions":[{"session_id":"first","title":"First","archived":false},{"session_id":"delete-me","title":"Delete me","archived":false},{"session_id":"last","title":"Last","archived":false}]}"#, for: request)
+            case "/api/session/delete":
+                return apiTestJSONResponse(#"{"ok":false,"error":"delete refused"}"#, for: request)
+            default:
+                XCTFail("Unexpected request path: \(request.url?.path ?? "nil")")
+                throw URLError(.badURL)
+            }
+        }
+
+        await viewModel.load()
+        let before = viewModel.sessions
+        let session = try XCTUnwrap(viewModel.sessions.first(where: { $0.sessionId == "delete-me" }))
+        let didDelete = await viewModel.delete(session)
+
+        XCTAssertFalse(didDelete)
+        XCTAssertEqual(viewModel.sessions, before)
+        XCTAssertEqual(viewModel.actionErrorMessage, "delete refused")
+        XCTAssertFalse(viewModel.isMutating(session))
+    }
+
+    @MainActor
     func testPinArchiveMoveAndDeleteCallServerMutationThenReloadSessions() async throws {
         var loadCount = 0
         var mutationPaths: [String] = []
