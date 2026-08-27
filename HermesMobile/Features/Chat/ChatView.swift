@@ -1774,7 +1774,7 @@ struct ChatView: View {
 
         for url in fileURLs {
             do {
-                let file = try loadPastedFile(from: url, suggestedName: nil)
+                let file = try await loadPastedFile(from: url, suggestedName: nil)
                 await viewModel.uploadAttachment(data: file.data, filename: file.filename)
             } catch {
                 viewModel.setUploadAttachmentError(error.localizedDescription)
@@ -1853,11 +1853,13 @@ struct ChatView: View {
                     return
                 }
 
-                do {
-                    let file = try loadPastedFile(from: url, suggestedName: suggestedName)
-                    continuation.resume(returning: file)
-                } catch {
-                    continuation.resume(throwing: error)
+                Task {
+                    do {
+                        let file = try await loadPastedFile(from: url, suggestedName: suggestedName)
+                        continuation.resume(returning: file)
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
                 }
             }
         }
@@ -1873,7 +1875,7 @@ struct ChatView: View {
 
         for url in fileURLs {
             do {
-                let file = try loadPastedFile(from: url, suggestedName: nil)
+                let file = try await loadPastedFile(from: url, suggestedName: nil)
                 await viewModel.uploadAttachment(data: file.data, filename: file.filename)
             } catch {
                 viewModel.setUploadAttachmentError(error.localizedDescription)
@@ -1881,19 +1883,8 @@ struct ChatView: View {
         }
     }
 
-    private func loadPastedFile(from url: URL, suggestedName: String?) throws -> PastedFile {
-        let didStartAccessing = url.startAccessingSecurityScopedResource()
-        defer {
-            if didStartAccessing {
-                url.stopAccessingSecurityScopedResource()
-            }
-        }
-
-        let data = try Data(contentsOf: url)
-        let filename = url.lastPathComponent.isEmpty
-            ? suggestedName ?? "pasted-file"
-            : url.lastPathComponent
-        return PastedFile(data: data, filename: filename)
+    private func loadPastedFile(from url: URL, suggestedName: String?) async throws -> PastedFile {
+        try await PastedFileLoader.load(from: url, suggestedName: suggestedName)
     }
 
     private func loadPastedImage(from provider: NSItemProvider) async throws -> PastedFile {
@@ -2571,9 +2562,31 @@ enum ChatToolbarSubtitleResolver {
     }
 }
 
-private struct PastedFile {
+struct PastedFile: Sendable {
     let data: Data
     let filename: String
+}
+
+enum PastedFileLoader {
+    static func load(from url: URL, suggestedName: String?) async throws -> PastedFile {
+        let didStartAccessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccessing {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        try Task.checkCancellation()
+        let file = try await Task.detached(priority: .userInitiated) {
+            let data = try Data(contentsOf: url)
+            let filename = url.lastPathComponent.isEmpty
+                ? suggestedName ?? "pasted-file"
+                : url.lastPathComponent
+            return PastedFile(data: data, filename: filename)
+        }.value
+        try Task.checkCancellation()
+        return file
+    }
 }
 
 private enum PastedFileError: LocalizedError {

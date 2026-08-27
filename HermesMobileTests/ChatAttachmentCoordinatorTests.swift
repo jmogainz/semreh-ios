@@ -11,6 +11,19 @@ final class ChatAttachmentCoordinatorTests: APIClientTestCase {
         super.tearDown()
     }
 
+    func testPastedFileLoaderReadsSelectedFileAndPreservesFilename() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("semreh-pasted-file-\(UUID().uuidString).txt")
+        let expectedData = Data("selected file contents".utf8)
+        try expectedData.write(to: url, options: .atomic)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let file = try await PastedFileLoader.load(from: url, suggestedName: nil)
+
+        XCTAssertEqual(file.data, expectedData)
+        XCTAssertEqual(file.filename, url.lastPathComponent)
+    }
+
     func testUploadSuccessAddsPendingAttachmentAndPreparesLocalPreview() async throws {
         let imageData = try XCTUnwrap(Self.imageData())
         var uploadedFilename: String?
