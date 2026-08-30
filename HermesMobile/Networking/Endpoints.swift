@@ -73,7 +73,7 @@ enum Endpoint {
     case modelsLive
     case commands
     case defaultModel
-    case reasoning(model: String? = nil, provider: String? = nil, sessionEffort: String? = nil)
+    case reasoning(model: String? = nil, provider: String? = nil, sessionID: String? = nil)
     case personalities
     case setPersonality
     case profiles
@@ -506,7 +506,7 @@ enum Endpoint {
             return request.queryItems
         case let .kanbanAddDependency(request), let .kanbanRemoveDependency(request):
             return request.queryItems
-        case let .reasoning(model, provider, sessionEffort):
+        case let .reasoning(model, provider, sessionID):
             var items: [URLQueryItem] = []
             if let model, !model.isEmpty {
                 items.append(URLQueryItem(name: "model", value: model))
@@ -514,8 +514,8 @@ enum Endpoint {
             if let provider, !provider.isEmpty {
                 items.append(URLQueryItem(name: "provider", value: provider))
             }
-            if let sessionEffort {
-                items.append(URLQueryItem(name: "session_effort", value: sessionEffort))
+            if let sessionID, !sessionID.isEmpty {
+                items.append(URLQueryItem(name: "session_id", value: sessionID))
             }
             return items
         case let .insights(days):

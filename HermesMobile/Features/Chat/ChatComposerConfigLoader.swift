@@ -128,11 +128,16 @@ struct ChatComposerConfigLoader {
             let reasoningResponse = try await client.reasoning(
                 model: Self.nonEmpty(state.currentModel),
                 provider: Self.nonEmpty(state.currentModelProvider),
-                sessionEffort: state.sessionReasoningEffort
+                sessionID: Self.nonEmpty(sessionID)
             )
             state.selectedReasoningEffort = reasoningResponse.effectiveEffort
-            state.sessionReasoningEffort = reasoningResponse.normalizedSessionReasoningEffort
-                ?? state.sessionReasoningEffort
+            if reasoningResponse.sessionScopedReasoning == true {
+                // A null raw override is authoritative: it means this session
+                // inherits the profile default rather than retaining stale cache.
+                state.sessionReasoningEffort = reasoningResponse.normalizedSessionReasoningEffort
+            } else if let rawEffort = reasoningResponse.normalizedSessionReasoningEffort {
+                state.sessionReasoningEffort = rawEffort
+            }
             state.supportedReasoningEfforts = reasoningResponse.normalizedSupportedEfforts
             state.supportsReasoningEffort = reasoningResponse.supportsReasoningEffort
             state.sessionScopedReasoning = reasoningResponse.sessionScopedReasoning

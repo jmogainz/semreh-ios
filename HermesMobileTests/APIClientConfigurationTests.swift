@@ -258,8 +258,8 @@ final class APIClientConfigurationTests: APIClientTestCase {
             )
             XCTAssertEqual(query["model"], "gpt-5.4")
             XCTAssertEqual(query["provider"], "openai")
-            XCTAssertEqual(query["session_effort"], "high")
-            XCTAssertNil(query["session_id"])
+            XCTAssertEqual(query["session_id"], "session-abc")
+            XCTAssertNil(query["session_effort"])
 
             return apiTestJSONResponse("""
             {
@@ -275,7 +275,7 @@ final class APIClientConfigurationTests: APIClientTestCase {
         let response = try await client.reasoning(
             model: "gpt-5.4",
             provider: "openai",
-            sessionEffort: "high"
+            sessionID: "session-abc"
         )
 
         XCTAssertEqual(response.supportedEfforts, ["minimal", "low", "medium", "high", "xhigh"])
@@ -368,12 +368,13 @@ final class APIClientConfigurationTests: APIClientTestCase {
                 )
                 XCTAssertEqual(query["model"], "gpt-5.4")
                 XCTAssertEqual(query["provider"], "openai")
-                XCTAssertEqual(query["session_effort"], "max")
-                XCTAssertNil(query["session_id"] ?? nil)
+                XCTAssertEqual(query["session_id"], "session-abc")
+                XCTAssertNil(query["session_effort"] ?? nil)
                 return apiTestJSONResponse("""
                 {
                   "ok": true,
                   "reasoning_effort": "max",
+                  "session_reasoning_effort": "max",
                   "supported_efforts": ["minimal", "low", "medium", "high", "xhigh", "max"],
                   "session_scoped_reasoning": true
                 }

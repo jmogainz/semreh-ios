@@ -26,15 +26,15 @@ extension APIClient {
 
     /// Passing the session's current model + provider makes `supported_efforts`
     /// model-accurate (mirrors the upstream WebUI composer chip, issue #18).
-    /// New Hermes servers accept the raw session override as `session_effort`;
-    /// legacy servers omit that query and resolve the profile default.
+    /// A session-scoped read must use the canonical session ID so the server can
+    /// return both the effective effort and the raw override (`nil` means inherit).
     func reasoning(
         model: String? = nil,
         provider: String? = nil,
-        sessionEffort: String? = nil
+        sessionID: String? = nil
     ) async throws -> ReasoningStatusResponse {
         try await send(
-            endpoint: .reasoning(model: model, provider: provider, sessionEffort: sessionEffort),
+            endpoint: .reasoning(model: model, provider: provider, sessionID: sessionID),
             method: "GET"
         )
     }
@@ -58,7 +58,7 @@ extension APIClient {
             let response = try await reasoning(
                 model: updatedSession?.model,
                 provider: updatedSession?.modelProvider,
-                sessionEffort: rawEffort
+                sessionID: sessionID
             )
             // The canonical status response reports the effective effort. The
             // raw override lives in the session-update envelope, so preserve it

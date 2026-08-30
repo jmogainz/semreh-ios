@@ -202,11 +202,11 @@ final class ContractReadinessTests: XCTestCase {
                 query: ["model": "gpt-5.4", "provider": "openai"]
             ),
             .init(
-                name: "reasoning read scoped to session effort, model, and provider",
+                name: "reasoning read scoped to session ID, model, and provider",
                 method: "GET",
-                endpoint: .reasoning(model: "gpt-5.4", provider: "openai", sessionEffort: "high"),
+                endpoint: .reasoning(model: "gpt-5.4", provider: "openai", sessionID: "session-abc"),
                 path: "/api/reasoning",
-                query: ["model": "gpt-5.4", "provider": "openai", "session_effort": "high"]
+                query: ["model": "gpt-5.4", "provider": "openai", "session_id": "session-abc"]
             ),
             .init(name: "reasoning save", method: "POST", endpoint: .reasoning(), path: "/api/reasoning"),
             .init(name: "personalities", method: "GET", endpoint: .personalities, path: "/api/personalities"),

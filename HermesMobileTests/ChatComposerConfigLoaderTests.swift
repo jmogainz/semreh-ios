@@ -167,7 +167,7 @@ final class ChatComposerConfigLoaderTests: APIClientTestCase {
     }
 
     func testLoadUsesEachActiveSessionForEffectiveReasoningValue() async throws {
-        var reasoningSessionEfforts: [String?] = []
+        var reasoningSessionIDs: [String?] = []
         let client = makeClient { request in
             switch request.url?.path {
             case "/api/profiles":
@@ -195,11 +195,11 @@ final class ChatComposerConfigLoaderTests: APIClientTestCase {
             case "/api/reasoning":
                 let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
                 let query = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value) })
-                XCTAssertNil(query["session_id"])
-                let effort = try XCTUnwrap(query["session_effort"] ?? nil)
-                reasoningSessionEfforts.append(effort)
+                let sessionID = try XCTUnwrap(query["session_id"] ?? nil)
+                reasoningSessionIDs.append(sessionID)
+                let effort = sessionID == "session-alpha" ? "low" : "high"
                 let response = """
-                {"reasoning_effort":"\(effort)","supported_efforts":["low","high"],"supports_reasoning_effort":true,"session_scoped_reasoning":true}
+                {"reasoning_effort":"\(effort)","session_reasoning_effort":"\(effort)","supported_efforts":["low","high"],"supports_reasoning_effort":true,"session_scoped_reasoning":true}
                 """
                 return apiTestJSONResponse(response, for: request)
             case "/api/workspaces":
@@ -216,13 +216,13 @@ final class ChatComposerConfigLoaderTests: APIClientTestCase {
             currentWorkspace: "/tmp/workspace",
             currentModel: "gpt-5.4",
             currentModelProvider: "openai",
-            sessionReasoningEffort: "low"
+            sessionReasoningEffort: nil
         )
         let betaState = ChatComposerConfigState(
             currentWorkspace: "/tmp/workspace",
             currentModel: "gpt-5.4",
             currentModelProvider: "openai",
-            sessionReasoningEffort: "high"
+            sessionReasoningEffort: nil
         )
         let loader = ChatComposerConfigLoader(client: client)
         let alpha = await loader.loadConfiguration(from: alphaState, sessionID: "session-alpha")
@@ -232,9 +232,11 @@ final class ChatComposerConfigLoaderTests: APIClientTestCase {
         XCTAssertNil(beta.configurationError)
         XCTAssertEqual(alpha.state.selectedReasoningEffort, "low")
         XCTAssertEqual(beta.state.selectedReasoningEffort, "high")
+        XCTAssertEqual(alpha.state.sessionReasoningEffort, "low")
+        XCTAssertEqual(beta.state.sessionReasoningEffort, "high")
         XCTAssertEqual(alpha.state.sessionScopedReasoning, true)
         XCTAssertEqual(beta.state.sessionScopedReasoning, true)
-        XCTAssertEqual(reasoningSessionEfforts, ["low", "high"])
+        XCTAssertEqual(reasoningSessionIDs, ["session-alpha", "session-beta"])
     }
 
     func testLoadReturnsPartialStateAndStillRefreshesCommandsWhenConfigurationFails() async throws {
