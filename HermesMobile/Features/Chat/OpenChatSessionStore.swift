@@ -13,6 +13,7 @@ final class OpenChatSessionStore {
     /// the lifetime of the process. Active streams are never counted as evictable.
     private let retentionPolicy: OpenChatSessionStoreRetentionPolicy
     private var viewModels: [OpenChatSessionKey: ChatViewModel] = [:]
+    private var gitAvailabilityViewModels: [OpenChatSessionKey: GitWorkspaceAvailabilityViewModel] = [:]
     /// Oldest first. This is deliberately separate from the dictionary so eviction
     /// remains deterministic instead of depending on dictionary iteration order.
     private var accessOrder: [OpenChatSessionKey] = []
@@ -53,6 +54,37 @@ final class OpenChatSessionStore {
             showsLiveActivityResponseExcerpts: showsLiveActivityResponseExcerpts
         )
         viewModels[key] = created
+        touch(key)
+        trimIdleViewModels(forServer: key.server)
+        return created
+    }
+
+    func gitAvailabilityViewModel(
+        session: SessionSummary,
+        server: URL,
+        chatViewModel: ChatViewModel
+    ) -> GitWorkspaceAvailabilityViewModel {
+        let key = OpenChatSessionKey(server: server, sessionID: Self.normalizedSessionID(session))
+        if let existing = gitAvailabilityViewModels[key] {
+            touch(key)
+            return existing
+        }
+
+        let retainedChatViewModel: ChatViewModel
+        if let existing = viewModels[key] {
+            retainedChatViewModel = existing
+        } else {
+            viewModels[key] = chatViewModel
+            touch(key)
+            retainedChatViewModel = chatViewModel
+        }
+
+        let created = GitWorkspaceAvailabilityViewModel(
+            session: session,
+            server: server,
+            apiClient: retainedChatViewModel.client
+        )
+        gitAvailabilityViewModels[key] = created
         touch(key)
         trimIdleViewModels(forServer: key.server)
         return created
@@ -188,6 +220,7 @@ final class OpenChatSessionStore {
         refreshTasks.values.forEach { $0.cancel() }
         refreshTasks.removeAll()
         viewModels.values.forEach { $0.stopSessionEventSync() }
+        gitAvailabilityViewModels.removeAll()
         viewModels.removeAll()
         accessOrder.removeAll()
         liveOwnershipGeneration = 0
@@ -233,6 +266,7 @@ final class OpenChatSessionStore {
         viewModel.cancelOwnedStreamStatusWatch()
         viewModel.cleanupPollingTasks()
         viewModels.removeValue(forKey: key)
+        gitAvailabilityViewModels.removeValue(forKey: key)
         accessOrder.removeAll { $0 == key }
     }
     private static func normalizedSessionID(_ session: SessionSummary) -> String {

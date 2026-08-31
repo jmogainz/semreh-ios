@@ -376,16 +376,19 @@ struct ChatView: View {
             )
         ))
         _initialAttachments = State(initialValue: initialAttachments)
-        _viewModel = State(initialValue: retainedViewModel ?? OpenChatSessionStore.shared.viewModel(
+        let openSessionStore = OpenChatSessionStore.shared
+        let resolvedRetainedViewModel = retainedViewModel ?? openSessionStore.viewModel(
             session: session,
             server: server,
             showsLiveActivityResponseExcerpts: UserDefaults.standard.bool(
                 forKey: AgentRunLiveActivityPrivacy.showsResponseExcerptsKey
             )
-        ))
-        _gitAvailabilityViewModel = State(initialValue: GitWorkspaceAvailabilityViewModel(
+        )
+        _viewModel = State(initialValue: resolvedRetainedViewModel)
+        _gitAvailabilityViewModel = State(initialValue: openSessionStore.gitAvailabilityViewModel(
             session: session,
-            server: server
+            server: server,
+            chatViewModel: resolvedRetainedViewModel
         ))
     }
 

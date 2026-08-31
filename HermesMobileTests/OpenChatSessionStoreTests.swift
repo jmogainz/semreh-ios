@@ -239,6 +239,97 @@ final class OpenChatSessionStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testStoreReusesGitAvailabilityViewModelAcrossRepeatedRequests() throws {
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let session = SessionSummary(sessionId: "session-git")
+        let store = OpenChatSessionStore.shared
+        let chatViewModel = store.viewModel(session: session, server: server)
+        let first = store.gitAvailabilityViewModel(
+            session: session,
+            server: server,
+            chatViewModel: chatViewModel
+        )
+
+        for _ in 0..<100 {
+            let reused = store.gitAvailabilityViewModel(
+                session: session,
+                server: server,
+                chatViewModel: chatViewModel
+            )
+            XCTAssertTrue(reused === first)
+        }
+    }
+
+    @MainActor
+    func testGitAvailabilityViewModelsAreIsolatedByServerAndSession() throws {
+        let serverA = try XCTUnwrap(URL(string: "https://a.example.test"))
+        let serverB = try XCTUnwrap(URL(string: "https://b.example.test"))
+        let store = OpenChatSessionStore.shared
+        let sessionA = SessionSummary(sessionId: "session-a")
+        let sessionB = SessionSummary(sessionId: "session-b")
+        let chatA = store.viewModel(session: sessionA, server: serverA)
+        let chatB = store.viewModel(session: sessionB, server: serverB)
+
+        let auxiliaryA = store.gitAvailabilityViewModel(
+            session: sessionA,
+            server: serverA,
+            chatViewModel: chatA
+        )
+        let auxiliaryB = store.gitAvailabilityViewModel(
+            session: sessionB,
+            server: serverB,
+            chatViewModel: chatB
+        )
+
+        XCTAssertFalse(auxiliaryA === auxiliaryB)
+        XCTAssertTrue(
+            store.gitAvailabilityViewModel(
+                session: sessionA,
+                server: serverA,
+                chatViewModel: chatA
+            ) === auxiliaryA
+        )
+    }
+
+    @MainActor
+    func testGitAvailabilityViewModelEvictionAndResetReleaseAuxiliaryEntry() throws {
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let store = OpenChatSessionStore(
+            retentionPolicy: OpenChatSessionStoreRetentionPolicy(maxIdleViewModelsPerServer: 1)
+        )
+        weak var evictedAuxiliary: GitWorkspaceAvailabilityViewModel?
+
+        do {
+            let session = SessionSummary(sessionId: "session-evicted")
+            let chatViewModel = store.viewModel(session: session, server: server)
+            evictedAuxiliary = store.gitAvailabilityViewModel(
+                session: session,
+                server: server,
+                chatViewModel: chatViewModel
+            )
+        }
+
+        _ = store.viewModel(
+            session: SessionSummary(sessionId: "session-retained"),
+            server: server
+        )
+        XCTAssertNil(evictedAuxiliary)
+
+        weak var resetAuxiliary: GitWorkspaceAvailabilityViewModel?
+        do {
+            let session = SessionSummary(sessionId: "session-reset")
+            let chatViewModel = store.viewModel(session: session, server: server)
+            resetAuxiliary = store.gitAvailabilityViewModel(
+                session: session,
+                server: server,
+                chatViewModel: chatViewModel
+            )
+        }
+        store.resetForTesting()
+        XCTAssertNil(resetAuxiliary)
+    }
+
+    @MainActor
     func testStoreRetentionDoesNotStartSessionEventSync() throws {
         let server = try XCTUnwrap(URL(string: "https://example.test"))
         let streamClient = SpySSEStreamingClient()
