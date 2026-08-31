@@ -134,6 +134,9 @@ enum TranscriptMediaSegment: Equatable {
 enum TranscriptMediaParser {
     static func segments(in markdown: String) -> [TranscriptMediaSegment] {
         guard !markdown.isEmpty else { return [] }
+        guard mightContainMediaReference(in: markdown) else {
+            return [.text(markdown)]
+        }
 
         var segments: [TranscriptMediaSegment] = []
         var index = markdown.startIndex
@@ -162,6 +165,13 @@ enum TranscriptMediaParser {
         }
 
         return segments
+    }
+
+    /// Most assistant text contains no media markers. Avoid allocating every
+    /// line and walking every Character at streaming cadence unless one of the
+    /// only two supported reference prefixes is present.
+    private static func mightContainMediaReference(in markdown: String) -> Bool {
+        markdown.range(of: "MEDIA:") != nil || markdown.range(of: fileURLMarker) != nil
     }
 
     private static func appendMediaSegments(in line: String, to segments: inout [TranscriptMediaSegment]) {

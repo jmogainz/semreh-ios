@@ -62,7 +62,7 @@ final class AppIconChoiceTests: XCTestCase {
             XCTAssertTrue(source.contains("foregroundRefreshTask?.cancel()"))
             XCTAssertTrue(source.contains("scenePhase == .active"))
         }
-        XCTAssertTrue(chatSource.contains(".onAppear {\n                foregroundRefreshTask?.cancel()\n                viewModel.cancelOwnedStreamStatusWatch()\n                foregroundRefreshTask = Task { @MainActor in\n                    guard !Task.isCancelled, scenePhase == .active else { return }\n                    await viewModel.reconnectStreamIfNeeded(modelContext: modelContext)"))
+        XCTAssertTrue(chatSource.contains(".onAppear {\n                viewModel.setTranscriptPresentationActive(true)\n                guard !disablesExternalLifecycle else { return }\n                foregroundRefreshTask?.cancel()\n                viewModel.cancelOwnedStreamStatusWatch()\n                foregroundRefreshTask = Task { @MainActor in\n                    guard !Task.isCancelled, scenePhase == .active else { return }\n                    await viewModel.reconnectStreamIfNeeded(modelContext: modelContext)"))
         XCTAssertTrue(chatSource.contains("ChatNavigationLifecycle.applyViewDisappear(to: viewModel)"))
         XCTAssertFalse(chatSource.contains("viewModel.suspendStreamForNavigation()"))
         XCTAssertTrue(chatSource.contains("ChatInitialAppearancePolicy.shouldReloadTranscriptOnAppear"))

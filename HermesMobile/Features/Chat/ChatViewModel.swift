@@ -200,13 +200,14 @@ enum ActiveStreamRecoveryState: Equatable {
 final class ChatViewModel {
     nonisolated private static let messagePageLimit = 50
     @ObservationIgnored private var incrementalTranscriptMessageIndex: Int?
+    @ObservationIgnored private var streamingAssistantMessageIndex: Int?
     @ObservationIgnored private var messageLoadGeneration = 0
     /// Monotonic invalidation key for transcript-rendering data. ChatView uses
     /// this instead of comparing every message/string when unrelated composer
     /// state changes cause the parent view to be reevaluated.
     private(set) var transcriptRenderRevision = 0
 
-    private(set) var messages: [ChatMessage] = [] {
+    @ObservationIgnored private(set) var messages: [ChatMessage] = [] {
         didSet {
             transcriptRenderRevision &+= 1
             if let index = incrementalTranscriptMessageIndex {
@@ -220,8 +221,11 @@ final class ChatViewModel {
     /// Memoized transcript mapping, recomputed once whenever `messages` or
     /// `messagesOffset` changes. Views read this single cached value instead of
     /// re-running the full classification pass on every body evaluation.
-    private(set) var displayedTranscriptMessages: [TranscriptMessage] = []
+    @ObservationIgnored private(set) var displayedTranscriptMessages: [TranscriptMessage] = []
     @ObservationIgnored private var displayedTranscriptRowIndexByLoadedIndex: [Int: Int] = [:]
+    #if DEBUG
+    @ObservationIgnored private(set) var transcriptFullRecomputeCountForTesting = 0
+    #endif
     private(set) var isLoading = false
     private(set) var isLoadingOlderMessages = false
     private(set) var isStartingChat = false
@@ -290,9 +294,10 @@ final class ChatViewModel {
     private var messagesBeforeCacheFirstPlaceholder: [ChatMessage] = []
     private var messagesOffsetBeforeCacheFirstPlaceholder = 0
     @ObservationIgnored private var pendingStreamingScrollTriggerTask: Task<Void, Never>?
-    @ObservationIgnored private var pendingAssistantTokenChunks: [String] = []
-    @ObservationIgnored private var pendingReasoningChunks: [String] = []
+    @ObservationIgnored private var pendingAssistantTextBuffer: String = ""
+    @ObservationIgnored private var pendingReasoningTextBuffer: String = ""
     @ObservationIgnored private var pendingStreamingContentFlushTask: Task<Void, Never>?
+    @ObservationIgnored private var isTranscriptPresentationActive = true
     @ObservationIgnored private var connectionVisibilityTask: Task<Void, Never>?
     private var isConnectionVisiblySlow = false
     private(set) var completedToolCallGroups: [ToolCallGroup] = [] {
@@ -335,11 +340,16 @@ final class ChatViewModel {
         messages[index] = message
     }
 
+    private func appendStreamingMessage(_ message: ChatMessage) {
+        // The first token creates the live assistant row. Mark its insertion as
+        // incremental too; remapping 10k stable rows on that first token is a
+        // visible main-thread hitch before paced rendering even begins.
+        incrementalTranscriptMessageIndex = messages.endIndex
+        messages.append(message)
+    }
+
     private func replaceDisplayedTranscriptMessage(at loadedIndex: Int) {
-        guard messages.indices.contains(loadedIndex),
-              let rowIndex = displayedTranscriptRowIndexByLoadedIndex[loadedIndex],
-              displayedTranscriptMessages.indices.contains(rowIndex)
-        else {
+        guard messages.indices.contains(loadedIndex) else {
             recomputeDisplayedTranscriptMessages()
             return
         }
@@ -351,7 +361,7 @@ final class ChatViewModel {
         }
 
         let offset = max(0, messagesOffset)
-        displayedTranscriptMessages[rowIndex] = TranscriptMessage(
+        let transcriptMessage = TranscriptMessage(
             loadedIndex: loadedIndex,
             renderID: "transcript:\(offset + loadedIndex)",
             anchorID: TranscriptTurnClassifier.anchorID(
@@ -361,11 +371,30 @@ final class ChatViewModel {
             ),
             message: message
         )
-        // Compression-card placement is keyed by loaded index/render ID, neither of
-        // which changes while appending tokens to an existing assistant row.
+
+        if let rowIndex = displayedTranscriptRowIndexByLoadedIndex[loadedIndex],
+           displayedTranscriptMessages.indices.contains(rowIndex) {
+            displayedTranscriptMessages[rowIndex] = transcriptMessage
+            // Compression-card placement is keyed by loaded index/render ID,
+            // neither of which changes while replacing a live assistant row.
+            return
+        }
+
+        if loadedIndex == messages.index(before: messages.endIndex) {
+            displayedTranscriptRowIndexByLoadedIndex[loadedIndex] = displayedTranscriptMessages.endIndex
+            displayedTranscriptMessages.append(transcriptMessage)
+            // An append cannot shift any existing transcript/reasoning anchor or
+            // compression-card placement, so the stable prefix stays untouched.
+            return
+        }
+
+        recomputeDisplayedTranscriptMessages()
     }
 
     private func recomputeDisplayedTranscriptMessages() {
+        #if DEBUG
+        transcriptFullRecomputeCountForTesting &+= 1
+        #endif
         displayedTranscriptMessages = Self.transcriptMessages(
             from: messages,
             messageOffset: messagesOffset
@@ -425,7 +454,12 @@ final class ChatViewModel {
         didSet { transcriptRenderRevision &+= 1 }
     }
     private(set) var streamingAssistantMessageID: String? {
-        didSet { transcriptRenderRevision &+= 1 }
+        didSet {
+            if streamingAssistantMessageID != oldValue {
+                streamingAssistantMessageIndex = nil
+            }
+            transcriptRenderRevision &+= 1
+        }
     }
     private(set) var toolCallAnchorMessageID: String? {
         didSet { transcriptRenderRevision &+= 1 }
@@ -893,13 +927,16 @@ final class ChatViewModel {
 
     var hasStreamingAssistantMessageContent: Bool {
         guard let streamingAssistantMessageID,
-              let message = messages.first(where: { $0.messageId == streamingAssistantMessageID })
+              let index = streamingAssistantMessagePosition(for: streamingAssistantMessageID),
+              messages.indices.contains(index)
         else { return false }
 
+        let message = messages[index]
         return message.content?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 
     private func scheduleStreamingScrollTrigger() {
+        guard isTranscriptPresentationActive else { return }
         guard pendingStreamingScrollTriggerTask == nil else { return }
 
         let expectedSessionID = sessionID
@@ -921,6 +958,7 @@ final class ChatViewModel {
     }
 
     private func scheduleStreamingContentFlush(afterNanoseconds delay: UInt64? = nil) {
+        guard isTranscriptPresentationActive else { return }
         guard pendingStreamingContentFlushTask == nil else { return }
 
         let expectedSessionID = sessionID
@@ -942,9 +980,10 @@ final class ChatViewModel {
     /// Completion paths (done/cancel/error/interim/snapshot) bypass pacing via
     /// `flushPendingStreamingContent()`, which cancels any scheduled tick.
     private func drainStreamingContentTick() {
+        guard isTranscriptPresentationActive else { return }
         var didMutate = false
         let quota = StreamingWordDrain.drainQuota(
-            backlogUnitCount: StreamingWordDrain.unitCount(in: pendingAssistantTokenChunks.joined()),
+            backlogUnitCount: StreamingWordDrain.unitCount(in: pendingAssistantTextBuffer),
             cadenceNanoseconds: streamingWordRevealCadenceNanoseconds,
             maxLagNanoseconds: streamingMaxRevealLagNanoseconds
         )
@@ -959,7 +998,7 @@ final class ChatViewModel {
             scheduleStreamingScrollTrigger()
         }
 
-        if !pendingAssistantTokenChunks.isEmpty {
+        if !pendingAssistantTextBuffer.isEmpty {
             scheduleStreamingContentFlush(afterNanoseconds: streamingWordRevealCadenceNanoseconds)
         }
     }
@@ -969,10 +1008,27 @@ final class ChatViewModel {
         pendingStreamingContentFlushTask = nil
     }
 
+    /// Keep the session-owned transport alive while preventing an offscreen or
+    /// background transcript from doing word-cadence state/layout work. The
+    /// accumulated tail is presented immediately when the conversation returns.
+    func setTranscriptPresentationActive(_ isActive: Bool) {
+        guard isTranscriptPresentationActive != isActive else { return }
+        isTranscriptPresentationActive = isActive
+
+        if isActive {
+            if !pendingAssistantTextBuffer.isEmpty || !pendingReasoningTextBuffer.isEmpty {
+                scheduleStreamingContentFlush(afterNanoseconds: 0)
+            }
+        } else {
+            cancelPendingStreamingContentFlush()
+            cancelPendingStreamingScrollTrigger()
+        }
+    }
+
     private func resetPendingStreamingContentBuffers() {
         cancelPendingStreamingContentFlush()
-        pendingAssistantTokenChunks = []
-        pendingReasoningChunks = []
+        pendingAssistantTextBuffer = ""
+        pendingReasoningTextBuffer = ""
         // Chunks are deduplicated at append time, so the replay matched-prefix
         // counters can reference unflushed content; dropping the buffers makes them
         // stale. Reset only the counters — the replay connection may still be live
@@ -4413,7 +4469,7 @@ final class ChatViewModel {
         flushPendingStreamingContent()
 
         if let streamingAssistantMessageID,
-           let index = messages.firstIndex(where: { $0.messageId == streamingAssistantMessageID }) {
+           let index = streamingAssistantMessagePosition(for: streamingAssistantMessageID) {
             let existing = messages[index]
             let currentContent = existing.content ?? ""
             let textToAppend = deduplicatedReplayText(
@@ -4427,7 +4483,7 @@ final class ChatViewModel {
             let shouldUseSeparator = currentContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
                 && !shouldAppendReplaySuffixDirectly
             let separator = shouldUseSeparator ? "\n\n" : ""
-            messages[index] = ChatMessage(
+            replaceStreamingMessage(at: index, with: ChatMessage(
                 role: existing.role,
                 content: currentContent + separator + textToAppend,
                 timestamp: existing.timestamp,
@@ -4440,7 +4496,7 @@ final class ChatViewModel {
                 reasoning: existing.reasoning,
                 attachments: existing.attachments,
                 turnTps: existing.turnTps
-            )
+            ))
             return true
         }
 
@@ -4583,7 +4639,7 @@ final class ChatViewModel {
 
         let messageID = "stream-\(UUID().uuidString)"
         streamingAssistantMessageID = messageID
-        messages.append(
+        appendStreamingMessage(
             ChatMessage(
                 role: "assistant",
                 content: "",
@@ -4591,7 +4647,23 @@ final class ChatViewModel {
                 messageId: messageID
             )
         )
+        streamingAssistantMessageIndex = messages.indices.last
         return messageID
+    }
+
+    /// Resolve the active row once, then validate the cached position in O(1)
+    /// on every token. Structural transcript changes may shift the row; those
+    /// pay for one backward lookup rather than one full scan per flush.
+    private func streamingAssistantMessagePosition(for messageID: String) -> Int? {
+        if let index = streamingAssistantMessageIndex,
+           messages.indices.contains(index),
+           messages[index].messageId == messageID {
+            return index
+        }
+
+        let index = messages.lastIndex(where: { $0.messageId == messageID })
+        streamingAssistantMessageIndex = index
+        return index
     }
 
     @discardableResult
@@ -4601,7 +4673,7 @@ final class ChatViewModel {
         // Same append-time dedup contract as appendAssistantToken: return true iff
         // the event contributed new content, mutate only via the coalesced flush.
         _ = ensureStreamingAssistantMessage()
-        let effectiveContent = liveReasoningText + pendingReasoningChunks.joined()
+        let effectiveContent = liveReasoningText + pendingReasoningTextBuffer
         let remainder = deduplicatedReplayText(
             text,
             existingContent: effectiveContent,
@@ -4609,18 +4681,18 @@ final class ChatViewModel {
         )
         guard !remainder.isEmpty else { return false }
 
-        pendingReasoningChunks.append(remainder)
+        pendingReasoningTextBuffer.append(remainder)
         scheduleStreamingContentFlush()
         return true
     }
 
     @discardableResult
     private func flushReasoningChunks() -> Bool {
-        guard !pendingReasoningChunks.isEmpty else { return false }
+        guard !pendingReasoningTextBuffer.isEmpty else { return false }
 
         // Chunks were deduplicated at append time, so flushing is pure concatenation.
-        let appendedText = pendingReasoningChunks.joined()
-        pendingReasoningChunks = []
+        let appendedText = pendingReasoningTextBuffer
+        pendingReasoningTextBuffer = ""
 
         let messageID = ensureStreamingAssistantMessage()
         if reasoningAnchorMessageID == nil {
@@ -4760,34 +4832,35 @@ final class ChatViewModel {
         // return value stays a synchronous progress signal for the reconnect watchdog
         // while transcript mutation stays batched behind the coalesced flush.
         let messageID = ensureStreamingAssistantMessage()
-        let flushedContent = messages.first(where: { $0.messageId == messageID })?.content ?? ""
-        let effectiveContent = flushedContent + pendingAssistantTokenChunks.joined()
+        let flushedContent = streamingAssistantMessagePosition(for: messageID)
+            .flatMap { messages[$0].content } ?? ""
+        let effectiveContent = flushedContent + pendingAssistantTextBuffer
         let remainder = deduplicatedReplayToken(token, existingContent: effectiveContent)
         guard !remainder.isEmpty else { return false }
 
-        pendingAssistantTokenChunks.append(remainder)
+        pendingAssistantTextBuffer.append(remainder)
         scheduleStreamingContentFlush()
         return true
     }
 
     @discardableResult
     private func flushAssistantTokens(maxWordUnits: Int? = nil) -> Bool {
-        guard !pendingAssistantTokenChunks.isEmpty else { return false }
+        guard !pendingAssistantTextBuffer.isEmpty else { return false }
 
         // Chunks were deduplicated at append time, so flushing is pure concatenation.
         // A word-unit limit moves only the head of the buffer into the visible
         // message; the tail stays pending, keeping the replay-dedup invariant that
         // flushed + pending text is the full received content.
-        let pendingText = pendingAssistantTokenChunks.joined()
+        let pendingText = pendingAssistantTextBuffer
         let appendedContent: String
         if let maxWordUnits {
             let (head, tail) = StreamingWordDrain.splitAtUnitBoundary(pendingText, unitCount: maxWordUnits)
             guard !head.isEmpty else { return false }
             appendedContent = head
-            pendingAssistantTokenChunks = tail.isEmpty ? [] : [tail]
+            pendingAssistantTextBuffer = tail
         } else {
             appendedContent = pendingText
-            pendingAssistantTokenChunks = []
+            pendingAssistantTextBuffer = ""
         }
 
         let messageID = ensureStreamingAssistantMessage()
@@ -4798,7 +4871,7 @@ final class ChatViewModel {
             toolCallAnchorMessageID = messageID
         }
 
-        if let index = messages.firstIndex(where: { $0.messageId == messageID }) {
+        if let index = streamingAssistantMessagePosition(for: messageID) {
             let existing = messages[index]
             replaceStreamingMessage(
                 at: index,
@@ -6276,3 +6349,78 @@ private final class SpeechSynthesizerDelegate: NSObject, AVSpeechSynthesizerDele
         }
     }
 }
+
+#if DEBUG
+extension ChatViewModel {
+    /// Server-free fixture that exercises the exact production ChatView,
+    /// transcript rows, Markdown renderer, restoration, and bottom-scroll loop.
+    @MainActor
+    static func makePerformanceLabFixture() -> (
+        session: SessionSummary,
+        server: URL,
+        viewModel: ChatViewModel
+    ) {
+        let server = URL(string: "http://127.0.0.1:9")!
+        let session = SessionSummary(
+            sessionId: "semreh-chat-performance-lab",
+            title: "10,000-row performance lab"
+        )
+        TranscriptRestoreStore.shared.save(
+            TranscriptRestorePoint(
+                followingLatest: false,
+                visibleMessageID: "transcript:20"
+            ),
+            server: server,
+            sessionID: session.sessionId ?? session.id
+        )
+
+        let viewModel = ChatViewModel(session: session, server: server)
+        viewModel.seedPerformanceLab(messageCount: 10_000)
+        return (session, server, viewModel)
+    }
+
+    private func seedPerformanceLab(messageCount: Int) {
+        precondition(messageCount > 20)
+
+        messages = (0..<messageCount).map { index in
+            let role = index.isMultiple(of: 2) ? "user" : "assistant"
+            let content: String
+            if index == messageCount - 1 {
+                content = """
+                ## Deterministic long Markdown tail
+
+                This final response exercises the production streaming/Markdown surface after the 10,000-row history.
+
+                ```swift
+                \(String(repeating: "let value = Array(0..<1_000).reduce(0, +)\n", count: 320))
+                ```
+                """
+            } else if role == "assistant", index.isMultiple(of: 250) {
+                content = """
+                ### Checkpoint \(index)
+
+                - Stable row identity
+                - Lazy transcript layout
+                - Markdown parsing and reuse
+
+                `row_\(index)` remains deterministic across launches.
+                """
+            } else {
+                content = role == "user"
+                    ? "Synthetic user turn \(index) for deterministic large-conversation QA."
+                    : "Synthetic assistant turn \(index). The quick brown fox keeps this row stable and readable."
+            }
+
+            return ChatMessage(
+                role: role,
+                content: content,
+                timestamp: Double(index),
+                messageId: String(format: "perf-message-%06d", index)
+            )
+        }
+        isLoading = false
+        errorMessage = nil
+        hasOlderMessages = false
+    }
+}
+#endif

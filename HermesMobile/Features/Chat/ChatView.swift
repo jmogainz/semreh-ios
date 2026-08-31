@@ -292,6 +292,7 @@ struct ChatView: View {
     let server: URL
     let onAPIError: (Error) -> Void
     let loadsInitialMessages: Bool
+    let disablesExternalLifecycle: Bool
     /// When true, the composer auto-starts voice dictation on appear — set by the
     /// "New Chat with Voice" App Intent (#338). Defaults to false for normal opens.
     let autoStartsVoiceInput: Bool
@@ -305,6 +306,9 @@ struct ChatView: View {
     @State private var shouldFollowLatestMessage = true
     @State private var visibleTranscriptRowID: String?
     @State private var followScrollGeneration = 0
+    @State private var explicitBottomScrollGeneration = 0
+    @State private var isExplicitBottomScrollActive = false
+    @State private var explicitBottomScrollTask: Task<Void, Never>?
     @State private var isUserInteractingWithScroll = false
     @State private var userScrollCooldownUntil: Date?
     /// While set and in the future, auto-follow scrolls snap instead of animating, so
@@ -354,13 +358,16 @@ struct ChatView: View {
         initialDraft: String = "",
         initialAttachments: [SharedAttachmentImport] = [],
         loadsInitialMessages: Bool = true,
-        autoStartsVoiceInput: Bool = false
+        autoStartsVoiceInput: Bool = false,
+        retainedViewModel: ChatViewModel? = nil,
+        disablesExternalLifecycle: Bool = false
     ) {
         self.session = session
         self.server = server
         self.onAPIError = onAPIError
         self.loadsInitialMessages = loadsInitialMessages
         self.autoStartsVoiceInput = autoStartsVoiceInput
+        self.disablesExternalLifecycle = disablesExternalLifecycle
         _draftMessage = State(initialValue: ComposerDraftStore.resolvedDraft(
             initialDraft: initialDraft,
             storedDraft: ComposerDraftStore.shared.load(
@@ -369,7 +376,7 @@ struct ChatView: View {
             )
         ))
         _initialAttachments = State(initialValue: initialAttachments)
-        _viewModel = State(initialValue: OpenChatSessionStore.shared.viewModel(
+        _viewModel = State(initialValue: retainedViewModel ?? OpenChatSessionStore.shared.viewModel(
             session: session,
             server: server,
             showsLiveActivityResponseExcerpts: UserDefaults.standard.bool(
@@ -640,6 +647,8 @@ struct ChatView: View {
                 viewModel.setShowsLiveActivityResponseExcerpts(showsLiveActivityResponseExcerpts)
             }
             .onDisappear {
+                cancelExplicitBottomScroll()
+                viewModel.setTranscriptPresentationActive(false)
                 composerResizeTask?.cancel()
                 composerResizeTask = nil
                 persistComposerDraft()
@@ -648,6 +657,7 @@ struct ChatView: View {
                 foregroundRefreshTask = nil
                 activeStreamStatusRefreshTask?.cancel()
                 activeStreamStatusRefreshTask = nil
+                guard !disablesExternalLifecycle else { return }
                 // Stop the per-session event stream when the chat is not on
                 // screen. Background sync for every retained conversation caused
                 // main-thread disk I/O and transcript reloads (build 19 lag).
@@ -655,6 +665,8 @@ struct ChatView: View {
                 ChatNavigationLifecycle.applyViewDisappear(to: viewModel)
             }
             .onAppear {
+                viewModel.setTranscriptPresentationActive(true)
+                guard !disablesExternalLifecycle else { return }
                 foregroundRefreshTask?.cancel()
                 viewModel.cancelOwnedStreamStatusWatch()
                 foregroundRefreshTask = Task { @MainActor in
@@ -1262,7 +1274,12 @@ struct ChatView: View {
     }
 
     private var showsScrollToBottomButton: Bool {
-        !isScrolledNearBottom && (viewModel.activeStreamID == nil || !shouldFollowLatestMessage)
+        ChatScrollPolicy.shouldShowScrollToBottomButton(
+            isNearBottom: isScrolledNearBottom,
+            hasExplicitBottomRequest: isExplicitBottomScrollActive,
+            hasActiveStream: viewModel.activeStreamID != nil,
+            shouldFollowLatestMessage: shouldFollowLatestMessage
+        )
     }
 
     private var showsAssistantTypingIndicator: Bool {
@@ -1386,6 +1403,13 @@ struct ChatView: View {
 
     private func handleInitialAppearanceTask() async {
         prepareInitialAppearance()
+
+        if disablesExternalLifecycle {
+            requestTranscriptRestoreIfNeeded()
+            isInitialComposerFocusContentReady = true
+            handleInitialAppearanceCompletion()
+            return
+        }
 
         guard ChatInitialAppearancePolicy.shouldBeginAsyncWork(
             hasCompletedAppearance: didCompleteInitialAppearance
@@ -1945,6 +1969,7 @@ struct ChatView: View {
     private func handleScenePhaseChange(_ phase: ScenePhase) {
         switch phase {
         case .background:
+            viewModel.setTranscriptPresentationActive(false)
             persistComposerDraft()
             persistTranscriptRestore()
             foregroundRefreshTask?.cancel()
@@ -1953,8 +1978,10 @@ struct ChatView: View {
                 beginResponseCompletionBackgroundTask()
             }
         case .active:
+            viewModel.setTranscriptPresentationActive(true)
             viewModel.refreshListenPlaybackProgressAfterSceneActivation()
             endResponseCompletionBackgroundTask()
+            guard !disablesExternalLifecycle else { return }
             foregroundRefreshTask?.cancel()
             foregroundRefreshTask = Task { @MainActor in
                 await viewModel.refreshAfterSceneActivation(modelContext: modelContext)
@@ -1965,6 +1992,7 @@ struct ChatView: View {
                 }
             }
         case .inactive:
+            viewModel.setTranscriptPresentationActive(false)
             foregroundRefreshTask?.cancel()
             foregroundRefreshTask = nil
         @unknown default:
@@ -2068,14 +2096,60 @@ struct ChatView: View {
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
-        // Deliberate jump to the latest content. Snap without animation while a
-        // response is streaming so the tap lands immediately instead of racing
-        // the short follow animations already chasing incoming tokens.
-        scrollToLatestContent(
-            proxy,
-            animated: viewModel.activeStreamID == nil,
-            isUserInitiated: true
-        )
+        beginExplicitBottomScroll(proxy)
+    }
+
+    private func beginExplicitBottomScroll(_ proxy: ScrollViewProxy) {
+        explicitBottomScrollTask?.cancel()
+        explicitBottomScrollGeneration &+= 1
+        let generation = explicitBottomScrollGeneration
+
+        userScrollCooldownUntil = nil
+        shouldFollowLatestMessage = true
+        isReadingOlderTranscript = false
+        isExplicitBottomScrollActive = true
+
+        explicitBottomScrollTask = Task { @MainActor in
+            for delay in ChatScrollPolicy.explicitBottomSettlementDelays {
+                if delay > 0 {
+                    try? await Task.sleep(nanoseconds: delay)
+                } else {
+                    await Task.yield()
+                }
+
+                guard !Task.isCancelled,
+                      generation == explicitBottomScrollGeneration,
+                      isExplicitBottomScrollActive
+                else { return }
+
+                if isScrolledNearBottom {
+                    finishExplicitBottomScroll(generation: generation)
+                    return
+                }
+
+                // Explicit navigation should land, not animate toward a moving
+                // lazy-layout estimate. Repeating against the stable sentinel
+                // closes over rows/Markdown/media that realize during settlement.
+                proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+            }
+
+            guard generation == explicitBottomScrollGeneration else { return }
+            explicitBottomScrollTask = nil
+            // Leave the request active (and the button visible) if UIKit still
+            // reports distance. A subsequent tap starts a fresh settlement pass.
+        }
+    }
+
+    private func finishExplicitBottomScroll(generation: Int? = nil) {
+        if let generation, generation != explicitBottomScrollGeneration { return }
+        explicitBottomScrollTask?.cancel()
+        explicitBottomScrollTask = nil
+        isExplicitBottomScrollActive = false
+    }
+
+    private func cancelExplicitBottomScroll() {
+        explicitBottomScrollGeneration &+= 1
+        finishExplicitBottomScroll()
     }
 
     private func scrollToLatestTranscriptMessage(
@@ -2308,6 +2382,17 @@ struct ChatView: View {
         )
         isScrolledNearBottom = isNearBottom
         isUserInteractingWithScroll = metrics.isUserInteracting
+
+        if isExplicitBottomScrollActive {
+            if isNearBottom {
+                finishExplicitBottomScroll()
+            } else if ChatScrollPolicy.shouldCancelExplicitBottomRequest(
+                isDirectlyInteracting: metrics.isDirectlyInteracting,
+                isDecelerating: metrics.isDecelerating
+            ) {
+                cancelExplicitBottomScroll()
+            }
+        }
 
         // Touching the scroll view pauses auto-follow for a short window so
         // streaming layout growth cannot yank the viewport mid-gesture.

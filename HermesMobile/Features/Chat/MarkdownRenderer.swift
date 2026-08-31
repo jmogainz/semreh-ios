@@ -558,7 +558,7 @@ private struct ChatCodeBlock: View {
 
         guard !Task.isCancelled else { return }
 
-        let result = MarkdownCodeHighlighter.highlightedCode(for: request)
+        let result = await MarkdownCodeHighlightWorker.shared.highlightedCode(for: request)
         guard !Task.isCancelled else { return }
 
         switch result {
@@ -1099,20 +1099,19 @@ enum MarkdownHighlightPolicy {
     }
 }
 
-struct MarkdownCodeHighlightRequest: Equatable {
+struct MarkdownCodeHighlightRequest: Equatable, @unchecked Sendable {
     let code: String
     let language: String?
     let colorScheme: ColorScheme
     let isStreaming: Bool
 }
 
-enum MarkdownCodeHighlightResult {
+enum MarkdownCodeHighlightResult: @unchecked Sendable {
     case highlighted(NSAttributedString)
     case plain(reason: MarkdownHighlightFallbackReason, normalizedLanguage: String?)
 }
 
 enum MarkdownCodeHighlighter {
-    @MainActor
     static func highlightedCode(for request: MarkdownCodeHighlightRequest) -> MarkdownCodeHighlightResult {
         let decision = MarkdownHighlightPolicy.decision(
             for: request.code,
@@ -1144,6 +1143,17 @@ enum MarkdownCodeHighlighter {
     }
 }
 
+/// Serializes the non-thread-safe JavaScript/Splash highlighters on a dedicated
+/// executor. `ChatCodeBlock` awaits this actor from MainActor, allowing scrolling,
+/// typing, and layout to continue while completed code is parsed and colored.
+actor MarkdownCodeHighlightWorker {
+    static let shared = MarkdownCodeHighlightWorker()
+
+    func highlightedCode(for request: MarkdownCodeHighlightRequest) -> MarkdownCodeHighlightResult {
+        MarkdownCodeHighlighter.highlightedCode(for: request)
+    }
+}
+
 private enum SplashSwiftCodeHighlighter {
     static func highlightedAttributedString(for code: String, colorScheme: ColorScheme) -> NSAttributedString {
         let font = Splash.Font(size: 13)
@@ -1157,7 +1167,6 @@ private enum SplashSwiftCodeHighlighter {
     }
 }
 
-@MainActor
 private final class StableHighlightrStore {
     static let shared = StableHighlightrStore()
 

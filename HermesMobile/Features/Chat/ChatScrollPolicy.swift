@@ -120,6 +120,41 @@ enum ChatScrollPolicy {
     ) -> Bool {
         isNearBottom && !wasFollowingLatest
     }
+
+    /// A lazy transcript can need more than one layout pass before its bottom
+    /// sentinel has an exact position. Explicit jumps therefore settle in a
+    /// short, bounded sequence instead of trusting one open-loop `scrollTo`.
+    static let explicitBottomSettlementDelays: [UInt64] = [
+        0,
+        16_000_000,
+        48_000_000,
+        96_000_000,
+        180_000_000,
+        320_000_000
+    ]
+
+    /// Keep the affordance visible until UIKit reports that the viewport
+    /// physically arrived. Follow intent alone is not proof of scroll position.
+    static func shouldShowScrollToBottomButton(
+        isNearBottom: Bool,
+        hasExplicitBottomRequest: Bool,
+        hasActiveStream: Bool,
+        shouldFollowLatestMessage: Bool
+    ) -> Bool {
+        guard !isNearBottom else { return false }
+        return hasExplicitBottomRequest || !hasActiveStream || !shouldFollowLatestMessage
+    }
+
+    /// A trailing deceleration callback belongs to the gesture that preceded a
+    /// tap and must not cancel the tap. Only a new finger-driven interaction
+    /// supersedes an explicit jump.
+    static func shouldCancelExplicitBottomRequest(
+        isDirectlyInteracting: Bool,
+        isDecelerating: Bool
+    ) -> Bool {
+        _ = isDecelerating
+        return isDirectlyInteracting
+    }
 }
 
 /// Chooses the durable transcript row to use when reopening after the user has
@@ -183,6 +218,18 @@ enum ChatTranscriptRestoreTarget: Equatable {
 /// Leave/reopen must land at latest or the last-read message.
 /// `defaultScrollAnchor(.bottom)` plus LazyVStack often paints mid-list first.
 enum ChatTranscriptRestorePolicy {
+    /// LazyVStack estimates can miss a far-away row by dozens of cells on the
+    /// first pass. Reissue the same restore against progressively realized
+    /// geometry, then stop as soon as the intended viewport is reported.
+    static let settlementDelays: [UInt64] = [
+        0,
+        24_000_000,
+        64_000_000,
+        128_000_000,
+        240_000_000,
+        420_000_000
+    ]
+
     static func target(
         wasFollowingLatest: Bool,
         lastVisibleMessageID: String?
@@ -200,6 +247,98 @@ enum ChatTranscriptRestorePolicy {
 
     static func shouldProgrammaticallyRestoreOnAppear(hasMessages: Bool) -> Bool {
         hasMessages
+    }
+
+    static func hasReachedTarget(
+        _ target: ChatTranscriptRestoreTarget,
+        firstVisibleMessageID: String?,
+        isNearBottom: Bool
+    ) -> Bool {
+        switch target {
+        case .latest:
+            return isNearBottom
+        case .message(let id):
+            return firstVisibleMessageID == id
+        }
+    }
+
+    /// A restore is superseded only by a new finger-driven interaction. UIKit's
+    /// deceleration and asynchronous content/layout metrics still belong to the
+    /// restore that is settling.
+    static func shouldCancelPendingRestore(
+        isDirectlyInteracting: Bool,
+        isDecelerating: Bool
+    ) -> Bool {
+        _ = isDecelerating
+        return isDirectlyInteracting
+    }
+}
+
+/// Small, testable state machine for a transcript restore settlement pass.
+/// `ChatTranscriptView` starts with no geometry sample; its initial near-bottom
+/// input is only a default and cannot prove that a latest restore converged.
+struct ChatTranscriptRestoreState: Equatable {
+    /// The restore token currently owned by this settlement state. Nil is the
+    /// pre-request window in which a direct interaction can cancel the first
+    /// restore before ChatView has requested it.
+    private(set) var restoreToken: Int? = nil
+    private(set) var hasIssuedRestoreAttempt = false
+    private(set) var hasConfirmedMetricsSample = false
+    private(set) var isCancelled = false
+    private(set) var isNearBottom = false
+
+    /// Claims a restore token without allowing a pre-request cancellation to be
+    /// replaced by a fresh state. A different token represents a new lifecycle
+    /// request and starts a clean settlement pass.
+    mutating func beginRestore(token: Int) -> Bool {
+        guard restoreToken != token else { return !isCancelled }
+
+        let preservePreRequestCancellation = restoreToken == nil && isCancelled
+        restoreToken = token
+        hasIssuedRestoreAttempt = false
+        hasConfirmedMetricsSample = false
+        isNearBottom = false
+        isCancelled = preservePreRequestCancellation
+        return !isCancelled
+    }
+
+    mutating func recordRestoreAttempt() {
+        hasIssuedRestoreAttempt = true
+    }
+
+    mutating func recordMetrics(
+        isNearBottom: Bool,
+        isDirectlyInteracting: Bool,
+        isDecelerating: Bool
+    ) {
+        guard !isCancelled else { return }
+
+        if ChatTranscriptRestorePolicy.shouldCancelPendingRestore(
+            isDirectlyInteracting: isDirectlyInteracting,
+            isDecelerating: isDecelerating
+        ) {
+            isCancelled = true
+            return
+        }
+
+        hasConfirmedMetricsSample = true
+        self.isNearBottom = isNearBottom
+    }
+
+    func shouldSettle(
+        target: ChatTranscriptRestoreTarget,
+        firstVisibleMessageID: String?,
+        isNearBottom: Bool? = nil
+    ) -> Bool {
+        guard !isCancelled,
+              hasIssuedRestoreAttempt || hasConfirmedMetricsSample
+        else { return false }
+
+        return ChatTranscriptRestorePolicy.hasReachedTarget(
+            target,
+            firstVisibleMessageID: firstVisibleMessageID,
+            isNearBottom: isNearBottom ?? self.isNearBottom
+        )
     }
 }
 

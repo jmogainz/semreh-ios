@@ -151,6 +151,112 @@ final class ChatViewModelStreamingPaceTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testOffscreenTranscriptBuffersPresentationUntilReopened() async throws {
+        let streamClient = PacingSpySSEStreamingClient()
+        let viewModel = try makeViewModel(
+            streamClient: streamClient,
+            wordCadenceNanoseconds: 1_000_000,
+            maxLagNanoseconds: 50_000_000
+        )
+
+        let didStart = await viewModel.sendMessage("Keep working while I leave")
+        XCTAssertTrue(didStart)
+        viewModel.setTranscriptPresentationActive(false)
+        streamClient.emit(.token("alpha beta gamma"))
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(assistantContent(of: viewModel), "")
+        XCTAssertEqual(streamClient.stopCount, 0, "Leaving the screen must preserve transport ownership")
+
+        viewModel.setTranscriptPresentationActive(true)
+        _ = try await observeAssistantContent(viewModel, until: "alpha beta gamma")
+        XCTAssertEqual(assistantContent(of: viewModel), "alpha beta gamma")
+    }
+
+    @MainActor
+    func testStreamingMutationCostDoesNotScaleWithLoadedHistory() async throws {
+        let large = try await timedStreamingHotPaths(historyMessageCount: 10_000)
+        let small = try await timedStreamingHotPaths(historyMessageCount: 1_000)
+        let evidence = "SEMREH_HISTORY_SCALING "
+            + "1k_total=\(small.total)s 10k_total=\(large.total)s "
+            + "1k_has=\(small.hasContentLookup)s 10k_has=\(large.hasContentLookup)s "
+            + "1k_interim=\(small.interimIngestion)s 10k_interim=\(large.interimIngestion)s"
+        print(evidence)
+        let attachment = XCTAttachment(string: evidence)
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        XCTAssertLessThan(
+            large.total,
+            max(small.total * 3, 0.015),
+            "10k loaded rows must not make live-tail work history-proportional (1k=\(small.total)s, 10k=\(large.total)s)"
+        )
+        XCTAssertLessThan(
+            large.hasContentLookup,
+            max(small.hasContentLookup * 3, 0.015),
+            "hasStreamingAssistantMessageContent must stay history-independent (1k=\(small.hasContentLookup)s, 10k=\(large.hasContentLookup)s)"
+        )
+        XCTAssertLessThan(
+            large.interimIngestion,
+            max(small.interimIngestion * 3, 0.015),
+            "interim_assistant ingestion must stay history-independent (1k=\(small.interimIngestion)s, 10k=\(large.interimIngestion)s)"
+        )
+    }
+
+    @MainActor
+    func testStreamingPositionRecoversAfterOlderPagePrependsRows() async throws {
+        let streamClient = PacingSpySSEStreamingClient()
+        let olderMessages: [[String: Any]] = [[
+            "role": "user",
+            "content": "older page",
+            "message_id": "older-page-0",
+            "timestamp": 1_699_999_999
+        ]]
+        let viewModel = try makeViewModel(
+            streamClient: streamClient,
+            wordCadenceNanoseconds: 60_000_000_000,
+            maxLagNanoseconds: 3_600_000_000_000,
+            historyMessageCount: 4,
+            initialMessagesOffset: 1,
+            olderMessages: olderMessages
+        )
+
+        await viewModel.loadMessages()
+        XCTAssertEqual(viewModel.messagesOffset, 1)
+
+        let didStart = await viewModel.sendMessage("Keep the live tail")
+        XCTAssertTrue(didStart)
+        streamClient.emit(.token("live"))
+        viewModel.flushPendingStreamingContent()
+        let liveMessageID = try XCTUnwrap(viewModel.streamingAssistantMessageID)
+        XCTAssertTrue(viewModel.hasStreamingAssistantMessageContent)
+
+        let didLoadOlderMessages = await viewModel.loadOlderMessages()
+        XCTAssertTrue(didLoadOlderMessages)
+        XCTAssertEqual(viewModel.messages.first?.id, "older-page-0")
+        XCTAssertEqual(viewModel.messages.last?.id, liveMessageID)
+        XCTAssertTrue(
+            viewModel.hasStreamingAssistantMessageContent,
+            "a structural prepend must invalidate the cached index lookup without losing the live row"
+        )
+
+        let recomputesAfterPrepend = viewModel.transcriptFullRecomputeCountForTesting
+        streamClient.emit(.interimAssistant(InterimAssistantStreamEvent(
+            text: "late interim",
+            alreadyStreamed: false
+        )))
+
+        let expectedContent = "live\n\nlate interim"
+        XCTAssertEqual(viewModel.messages.last?.content, expectedContent)
+        XCTAssertEqual(viewModel.displayedTranscriptMessages.last?.message.content, expectedContent)
+        XCTAssertEqual(
+            viewModel.transcriptFullRecomputeCountForTesting,
+            recomputesAfterPrepend,
+            "an interim event after pagination must replace the shifted live row incrementally"
+        )
+    }
+
     // MARK: - Helpers
 
     /// 60s cadence with a far larger lag bound keeps the quota at one word per
@@ -171,8 +277,40 @@ final class ChatViewModelStreamingPaceTests: XCTestCase {
     private func makeViewModel(
         streamClient: PacingSpySSEStreamingClient,
         wordCadenceNanoseconds: UInt64,
-        maxLagNanoseconds: UInt64
+        maxLagNanoseconds: UInt64,
+        historyMessageCount: Int = 0,
+        initialMessagesOffset: Int = 0,
+        olderMessages: [[String: Any]] = []
     ) throws -> ChatViewModel {
+        let historyMessages: [[String: Any]] = (0..<historyMessageCount).map { index in
+            [
+                "role": index.isMultiple(of: 2) ? "user" : "assistant",
+                "content": "history-\(index)",
+                "message_id": "history-\(index)",
+                "timestamp": 1_700_000_000 + index
+            ]
+        }
+        var sessionPayload: [String: Any] = [
+            "session_id": "session-abc",
+            "title": "Pacing",
+            "messages": historyMessages
+        ]
+        if initialMessagesOffset > 0 {
+            sessionPayload["messages_offset"] = initialMessagesOffset
+        }
+        let sessionResponseData = try JSONSerialization.data(withJSONObject: [
+            "session": sessionPayload
+        ])
+        let sessionResponse = try XCTUnwrap(String(data: sessionResponseData, encoding: .utf8))
+        let olderSessionResponseData = try JSONSerialization.data(withJSONObject: [
+            "session": [
+                "session_id": "session-abc",
+                "messages": olderMessages,
+                "messages_offset": 0
+            ]
+        ])
+        let olderSessionResponse = try XCTUnwrap(String(data: olderSessionResponseData, encoding: .utf8))
+
         MockURLProtocol.requestHandler = { request in
             switch request.url?.path {
             case "/api/chat/start":
@@ -181,8 +319,14 @@ final class ChatViewModelStreamingPaceTests: XCTestCase {
                     for: request
                 )
             default:
+                if request.url?.query?.contains("msg_before=") == true {
+                    return apiTestJSONResponse(
+                        olderSessionResponse,
+                        for: request
+                    )
+                }
                 return apiTestJSONResponse(
-                    #"{"session": {"session_id": "session-abc", "title": "Pacing", "messages": []}}"#,
+                    sessionResponse,
                     for: request
                 )
             }
@@ -213,6 +357,90 @@ final class ChatViewModelStreamingPaceTests: XCTestCase {
             streamingScrollCoalescingDelayNanoseconds: 1_000_000,
             streamingWordRevealCadenceNanoseconds: wordCadenceNanoseconds,
             streamingMaxRevealLagNanoseconds: maxLagNanoseconds
+        )
+    }
+
+    @MainActor
+    private struct StreamingHotPathBenchmark {
+        let total: TimeInterval
+        let hasContentLookup: TimeInterval
+        let interimIngestion: TimeInterval
+    }
+
+    @MainActor
+    private func timedStreamingHotPaths(historyMessageCount: Int) async throws -> StreamingHotPathBenchmark {
+        let streamClient = PacingSpySSEStreamingClient()
+        let viewModel = try makeViewModel(
+            streamClient: streamClient,
+            wordCadenceNanoseconds: 60_000_000_000,
+            maxLagNanoseconds: 3_600_000_000_000,
+            historyMessageCount: historyMessageCount
+        )
+        await viewModel.loadMessages()
+        let didStart = await viewModel.sendMessage("Benchmark live tail")
+        XCTAssertTrue(didStart)
+        let startedAt = CFAbsoluteTimeGetCurrent()
+        streamClient.emit(.token("seed"))
+        viewModel.flushPendingStreamingContent()
+        XCTAssertTrue(viewModel.hasStreamingAssistantMessageContent)
+
+        var positiveLookups = 0
+        let hasStartedAt = CFAbsoluteTimeGetCurrent()
+        for _ in 0..<2_000 {
+            if viewModel.hasStreamingAssistantMessageContent {
+                positiveLookups += 1
+            }
+        }
+        let hasContentLookup = CFAbsoluteTimeGetCurrent() - hasStartedAt
+        XCTAssertEqual(positiveLookups, 2_000)
+
+        let recomputesBeforeBurst = viewModel.transcriptFullRecomputeCountForTesting
+        var expectedContent = "seed"
+        let interimStartedAt = CFAbsoluteTimeGetCurrent()
+        for index in 0..<400 {
+            let interimText = "interim-\(index)"
+            streamClient.emit(.interimAssistant(InterimAssistantStreamEvent(
+                text: interimText,
+                alreadyStreamed: false
+            )))
+            expectedContent += "\n\n\(interimText)"
+        }
+        let interimIngestion = CFAbsoluteTimeGetCurrent() - interimStartedAt
+
+        XCTAssertEqual(assistantContent(of: viewModel), expectedContent)
+        XCTAssertEqual(
+            viewModel.displayedTranscriptMessages.last?.message.content,
+            expectedContent,
+            "the incrementally replaced live row must display every interim event"
+        )
+        XCTAssertEqual(
+            viewModel.transcriptFullRecomputeCountForTesting,
+            recomputesBeforeBurst,
+            "interim_assistant must replace only the live row, not remap the full transcript"
+        )
+
+        let chunks = (0..<400).map { "t\($0) " }
+        for chunk in chunks {
+            streamClient.emit(.token(chunk))
+        }
+        let completionStartedAt = CFAbsoluteTimeGetCurrent()
+        streamClient.emit(.done(DoneStreamEvent()))
+        let completionElapsed = CFAbsoluteTimeGetCurrent() - completionStartedAt
+        let elapsed = CFAbsoluteTimeGetCurrent() - startedAt
+        print(
+            "SEMREH_HISTORY_PHASE rows=\(historyMessageCount) interim=\(interimIngestion)s completion=\(completionElapsed)s total=\(elapsed)s"
+        )
+
+        XCTAssertEqual(assistantContent(of: viewModel), expectedContent + chunks.joined())
+        XCTAssertEqual(
+            viewModel.displayedTranscriptMessages.last?.message.content,
+            expectedContent + chunks.joined(),
+            "the incrementally appended live row must paint the complete assistant content"
+        )
+        return StreamingHotPathBenchmark(
+            total: elapsed,
+            hasContentLookup: hasContentLookup,
+            interimIngestion: interimIngestion
         )
     }
 
@@ -282,6 +510,7 @@ final class ChatStreamingMotionTests: XCTestCase {
 
 private final class PacingSpySSEStreamingClient: SSEStreamingClient {
     private(set) var lastEventID: String?
+    private(set) var stopCount = 0
     private var onEvent: (@MainActor (SSEEvent) -> Void)?
 
     func start(url: URL, onEvent: @escaping @MainActor (SSEEvent) -> Void) {
@@ -289,7 +518,9 @@ private final class PacingSpySSEStreamingClient: SSEStreamingClient {
         self.onEvent = onEvent
     }
 
-    func stop() {}
+    func stop() {
+        stopCount += 1
+    }
 
     @MainActor
     func emit(_ event: SSEEvent) {

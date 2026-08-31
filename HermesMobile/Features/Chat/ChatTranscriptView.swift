@@ -94,6 +94,8 @@ struct ChatTranscriptView: View, Equatable {
     var transcriptRenderRevision = 0
 
     @State private var trackedVisibleTranscriptRowID: String?
+    @State private var restoreSettlementTask: Task<Void, Never>?
+    @State private var restoreSettlementState = ChatTranscriptRestoreState()
     private static let transcriptCoordinateSpaceName = "chatTranscript"
 
     var body: some View {
@@ -202,6 +204,10 @@ struct ChatTranscriptView: View, Equatable {
                 }
                 .onChange(of: restoreScrollToken) {
                     applyTranscriptRestore(proxy)
+                }
+                .onDisappear {
+                    restoreSettlementTask?.cancel()
+                    restoreSettlementTask = nil
                 }
                 .onChange(of: followRejoinScrollToken) {
                     guard followRejoinScrollToken > 0 else { return }
@@ -334,7 +340,7 @@ struct ChatTranscriptView: View, Equatable {
         .background {
             ZStack {
                 ChatScrollObserver(isStreaming: activeStreamID != nil) { metrics in
-                    onUpdateScrollMetrics(metrics)
+                    handleScrollMetrics(metrics)
                 }
 
                 ChatVerticalScrollAxisGuard()
@@ -360,12 +366,68 @@ struct ChatTranscriptView: View, Equatable {
             return
         }
 
-        switch restoreTarget {
-        case .latest:
-            onScrollToLatestContent(proxy, false)
-        case .message(let id):
-            onScrollToTranscriptMessage(proxy, id, false)
+        restoreSettlementTask?.cancel()
+        guard restoreSettlementState.beginRestore(token: restoreScrollToken) else {
+            restoreSettlementTask = nil
+            return
         }
+        let target = restoreTarget
+        restoreSettlementTask = Task { @MainActor in
+            for delay in ChatTranscriptRestorePolicy.settlementDelays {
+                if delay > 0 {
+                    try? await Task.sleep(nanoseconds: delay)
+                } else {
+                    await Task.yield()
+                }
+
+                guard !Task.isCancelled else { return }
+                guard !restoreSettlementState.isCancelled else { return }
+                if restoreSettlementState.shouldSettle(
+                    target: target,
+                    firstVisibleMessageID: trackedVisibleTranscriptRowID
+                ) {
+                    restoreSettlementTask = nil
+                    return
+                }
+
+                // Count the attempt immediately before issuing the proxy call.
+                // A default near-bottom value is not allowed to short-circuit the
+                // first real restore pass.
+                restoreSettlementState.recordRestoreAttempt()
+                switch target {
+                case .latest:
+                    onScrollToLatestContent(proxy, false)
+                case .message(let id):
+                    onScrollToTranscriptMessage(proxy, id, false)
+                }
+            }
+
+            guard !Task.isCancelled else { return }
+            restoreSettlementTask = nil
+        }
+    }
+
+    private func handleScrollMetrics(_ metrics: ChatScrollMetrics) {
+        let isNearBottom = ChatScrollPolicy.isNearBottom(
+            distanceFromBottom: max(0, metrics.distanceFromBottom),
+            isStreaming: activeStreamID != nil
+        )
+        restoreSettlementState.recordMetrics(
+            isNearBottom: isNearBottom,
+            isDirectlyInteracting: metrics.isDirectlyInteracting,
+            isDecelerating: metrics.isDecelerating
+        )
+
+        if restoreSettlementState.isCancelled {
+            // Invalidate the pending task in the same main-actor callback that
+            // observed the finger drag, so a later sleep wake cannot yank the
+            // viewport back. Deceleration and layout-only samples never enter
+            // this branch.
+            restoreSettlementTask?.cancel()
+            restoreSettlementTask = nil
+        }
+
+        onUpdateScrollMetrics(metrics)
     }
 
     @ViewBuilder

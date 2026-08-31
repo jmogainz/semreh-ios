@@ -316,6 +316,22 @@ final class TranscriptMediaParserTests: XCTestCase {
         XCTAssertEqual(TranscriptMediaReference(rawReference: "").displayName, "Media")
     }
 
+    func testPlainStreamingTextUsesMediaParserFastPath() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("HermesMobile/Features/Chat/TranscriptMedia.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let parserStart = try XCTUnwrap(source.range(of: "static func segments(in markdown: String)"))
+        let parserEnd = try XCTUnwrap(
+            source.range(of: "private static func appendMediaSegments", range: parserStart.upperBound..<source.endIndex)
+        )
+        let parserSource = String(source[parserStart.lowerBound..<parserEnd.lowerBound])
+
+        XCTAssertTrue(parserSource.contains("mightContainMediaReference"))
+        XCTAssertTrue(parserSource.contains("return [.text(markdown)]"))
+    }
+
     func testImageCacheKeySeparatesSameReferenceAcrossSessions() {
         let reference = TranscriptMediaReference(rawReference: "/tmp/result.png")
 
