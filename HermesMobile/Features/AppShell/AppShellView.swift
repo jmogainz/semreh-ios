@@ -3,7 +3,7 @@ import SwiftUI
 /// The three primary surfaces in the Semreh mobile shell.
 enum AppShellSurface: String, CaseIterable, Hashable, Identifiable {
     case sessions
-    case teams
+    case control
     case you
 
     var id: String { rawValue }
@@ -12,8 +12,8 @@ enum AppShellSurface: String, CaseIterable, Hashable, Identifiable {
         switch self {
         case .sessions:
             "Sessions"
-        case .teams:
-            "Teams"
+        case .control:
+            "Control"
         case .you:
             "You"
         }
@@ -23,27 +23,18 @@ enum AppShellSurface: String, CaseIterable, Hashable, Identifiable {
         switch self {
         case .sessions:
             "bubble.left.and.bubble.right.fill"
-        case .teams:
-            "person.2.fill"
+        case .control:
+            "slider.horizontal.3"
         case .you:
             "person.crop.circle.fill"
         }
     }
 
-    var showsMenu: Bool {
-        switch self {
-        case .sessions, .teams:
-            true
-        case .you:
-            false
-        }
-    }
-
     var showsPrimaryAction: Bool {
         switch self {
-        case .sessions, .teams:
+        case .sessions:
             true
-        case .you:
+        case .control, .you:
             false
         }
     }
@@ -58,8 +49,6 @@ struct AppShellView: View {
     @Binding var pendingDeepLinkedSessionID: String?
     @Binding var pendingNewChatRequest: NewChatRequest?
 
-    @State private var isMenuPresented = false
-    @State private var isTeamsActionPresented = false
     @State private var isSessionConversationPresented = false
     @State private var sessionSurfaceVisitID = 0
 
@@ -69,7 +58,6 @@ struct AppShellView: View {
                 if !isSessionConversationPresented && selectedSurface != .you {
                     AppShellTopBar(
                         surface: selectedSurface,
-                        onMenu: { isMenuPresented = true },
                         onPrimaryAction: handlePrimaryAction
                     )
                 }
@@ -80,14 +68,6 @@ struct AppShellView: View {
                 ) {
                     AppShellBottomBar(selection: $selectedSurface)
                 }
-            }
-            .sheet(isPresented: $isMenuPresented) {
-                AppShellMenuView(authManager: authManager, server: server)
-            }
-            .sheet(isPresented: $isTeamsActionPresented) {
-                TeamsActionPlaceholderView()
-                    .presentationDetents([.medium])
-                    .adaptiveFormPresentation()
             }
             .onChange(of: selectedSurface) { oldValue, newValue in
                 guard oldValue != newValue, newValue == .sessions else { return }
@@ -114,8 +94,8 @@ struct AppShellView: View {
                 }
             )
 
-        case .teams:
-            TeamsView(usesShellChrome: true)
+        case .control:
+            ControlView(authManager: authManager, server: server)
 
         case .you:
             YouView(authManager: authManager, server: server)
@@ -126,9 +106,7 @@ struct AppShellView: View {
         switch selectedSurface {
         case .sessions:
             pendingNewChatRequest = NewChatRequest()
-        case .teams:
-            isTeamsActionPresented = true
-        case .you:
+        case .control, .you:
             break
         }
     }
@@ -142,34 +120,22 @@ enum AppShellChromePolicy {
 
 private struct AppShellTopBar: View {
     let surface: AppShellSurface
-    let onMenu: () -> Void
     let onPrimaryAction: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
-                if surface.showsMenu {
-                    AppShellCircularButton(
-                        systemImage: "line.3.horizontal",
-                        accessibilityLabel: "Open menu",
-                        action: onMenu
-                    )
-                } else {
-                    Color.clear
-                        .frame(width: 48, height: 48)
-                        .accessibilityHidden(true)
-                }
-
                 Spacer(minLength: 0)
 
                 if surface.showsPrimaryAction {
                     AppShellCircularButton(
                         systemImage: "plus",
-                        accessibilityLabel: surface == .sessions ? "New session" : "Add to team",
+                        accessibilityLabel: "New session",
                         action: onPrimaryAction
                     )
                 }
             }
+            .frame(minHeight: 48)
 
             Text(surface.title)
                 .font(.system(size: 36, weight: .bold, design: .rounded))

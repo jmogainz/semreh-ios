@@ -4,19 +4,21 @@ import XCTest
 @MainActor
 final class AppShellNavigationTests: XCTestCase {
     func testPrimarySurfacesHaveStableOrderAndLabels() {
-        XCTAssertEqual(AppShellSurface.allCases, [.sessions, .teams, .you])
+        XCTAssertEqual(AppShellSurface.allCases, [.sessions, .control, .you])
         XCTAssertEqual(AppShellSurface.sessions.title, "Sessions")
-        XCTAssertEqual(AppShellSurface.teams.title, "Teams")
+        XCTAssertEqual(AppShellSurface.control.title, "Control")
         XCTAssertEqual(AppShellSurface.you.title, "You")
     }
 
-    func testMenuAndPrimaryActionAreLimitedToSessionsAndTeams() {
-        XCTAssertTrue(AppShellSurface.sessions.showsMenu)
+    func testOnlySessionsOffersTheShellPrimaryAction() {
         XCTAssertTrue(AppShellSurface.sessions.showsPrimaryAction)
-        XCTAssertTrue(AppShellSurface.teams.showsMenu)
-        XCTAssertTrue(AppShellSurface.teams.showsPrimaryAction)
-        XCTAssertFalse(AppShellSurface.you.showsMenu)
+        XCTAssertFalse(AppShellSurface.control.showsPrimaryAction)
         XCTAssertFalse(AppShellSurface.you.showsPrimaryAction)
+    }
+
+    func testControlUsesTheProductTitleAndDoesNotUseAppleControlCenterName() {
+        XCTAssertEqual(AppShellSurface.control.title, "Control")
+        XCTAssertNotEqual(AppShellSurface.control.title, "Control Center")
     }
 
     func testSessionNavigationStateMarksOnlyConversationDestinationsAsConversation() {

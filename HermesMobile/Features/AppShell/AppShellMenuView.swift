@@ -2,11 +2,10 @@ import SwiftUI
 import SwiftData
 
 @MainActor
-struct AppShellMenuView: View {
+struct ControlView: View {
     @Bindable var authManager: AuthManager
     let server: URL
 
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
     @State private var viewModel: SessionListViewModel
@@ -60,9 +59,6 @@ struct AppShellMenuView: View {
     var body: some View {
         NavigationStack {
             List {
-                menuHeader
-                    .listRowBackground(Color.clear)
-
                 SessionSidebarUtilityRows(
                     viewModel: viewModel,
                     topPadding: 8,
@@ -112,17 +108,9 @@ struct AppShellMenuView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .contentMargins(.top, 108, for: .scrollContent)
             .scrollContentBackground(.hidden)
             .background(SemrehBackdrop().ignoresSafeArea())
-            .navigationTitle("Menu")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
             .navigationDestination(item: $selectedDestination) { destination in
                 utilityDestination(destination)
             }
@@ -191,28 +179,6 @@ struct AppShellMenuView: View {
         .adaptiveFormPresentation()
     }
 
-    private var menuHeader: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "line.3.horizontal")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(SemrehVisualTheme.energy())
-                .frame(width: 42, height: 42)
-                .background(SemrehVisualTheme.energy().opacity(0.14), in: Circle())
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Semreh menu")
-                    .font(.headline)
-                Text(serverDisplayName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 8)
-    }
-
     private var sidebarSectionVisibility: SidebarSectionVisibility {
         SidebarSectionVisibility(
             tasks: showsTasksSection,
@@ -258,12 +224,12 @@ struct AppShellMenuView: View {
                 showsMessageCount: true,
                 showsWorkspace: true,
                 selectedSessionID: nil,
-                actions: menuRowActions
+                actions: controlRowActions
             )
         }
     }
 
-    private var menuRowActions: SessionListRowActions {
+    private var controlRowActions: SessionListRowActions {
         SessionListRowActions(
             retryLoad: { Task { _ = await viewModel.load(modelContext: modelContext) } },
             open: { _ in },
@@ -286,17 +252,10 @@ struct AppShellMenuView: View {
         _ = await (sessions, profile, projects)
     }
 
-    private var serverDisplayName: String {
-        if let host = server.host, !host.isEmpty {
-            return host
-        }
-
-        return server.absoluteString
-    }
 }
 
 #Preview {
-    AppShellMenuView(
+    ControlView(
         authManager: AuthManager(),
         server: URL(staticString: "https://hermes.example.test")
     )
