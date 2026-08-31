@@ -13,7 +13,10 @@ extension APIClient {
     /// `archivedLimit` optionally caps how many archived rows the server appends
     /// (issue #17). Defaults keep today's request untouched.
     func sessions(includeArchived: Bool = false, archivedLimit: Int? = nil) async throws -> SessionsResponse {
-        try await send(
+        if !includeArchived, await officialCapabilityValid() {
+            return try await officialSessionsResponse()
+        }
+        return try await send(
             endpoint: .sessions(includeArchived: includeArchived, archivedLimit: archivedLimit),
             method: "GET"
         )
@@ -33,7 +36,14 @@ extension APIClient {
         messageBefore: Int? = nil,
         expandRenderable: Bool = false
     ) async throws -> SessionResponse {
-        try await send(
+        if await officialCapabilityValid() {
+            return try await officialSessionResponse(
+                id: id,
+                includeMessages: includeMessages,
+                messageLimit: messageLimit
+            )
+        }
+        return try await send(
             endpoint: .session(
                 id: id,
                 includeMessages: includeMessages,
@@ -50,7 +60,12 @@ extension APIClient {
     }
 
     func createSession(workspace: String?, model: String?, modelProvider: String?, profile: String?) async throws -> SessionResponse {
-        try await send(
+        if modelProvider == nil, profile == nil, await officialCapabilityValid() {
+            // Workspace/profile are not fields in the authoritative official
+            // create handler. The server owns canonical session placement.
+            return try await officialCreateSessionResponse(model: model)
+        }
+        return try await send(
             endpoint: .newSession,
             method: "POST",
             body: NewSessionRequest(
@@ -234,4 +249,3 @@ private struct SessionYoloRequest: Encodable {
     let sessionId: String
     let enabled: Bool
 }
-

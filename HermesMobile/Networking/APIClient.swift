@@ -33,15 +33,20 @@ actor APIClient {
     /// Internal, not private, because the upload and transcribe extensions build
     /// their multipart requests by hand and need the same header injection (#61).
     let customHeaderProvider: @Sendable () -> [CustomHeader]
+    /// Optional sidecar. When absent, this client is byte-for-byte the WebUI
+    /// client, including its base URL, headers, and endpoint selection.
+    nonisolated let officialContinuityClient: OfficialHermesContinuityClient?
 
     init(
         baseURL: URL,
         session: URLSession? = nil,
         publicMediaSession: URLSession? = nil,
-        customHeaderProvider: @escaping @Sendable () -> [CustomHeader] = { CustomHeaderStore.shared.snapshot() }
+        customHeaderProvider: @escaping @Sendable () -> [CustomHeader] = { CustomHeaderStore.shared.snapshot() },
+        officialContinuityClient: OfficialHermesContinuityClient? = nil
     ) {
         self.baseURL = baseURL
         self.customHeaderProvider = customHeaderProvider
+        self.officialContinuityClient = officialContinuityClient
 
         // One redirect guard shared by both sessions (same origin + same header
         // provider). Wired into the default sessions so a server-issued

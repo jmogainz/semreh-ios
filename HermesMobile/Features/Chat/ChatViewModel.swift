@@ -691,7 +691,7 @@ final class ChatViewModel {
         isCLISession = session.isCliSession == true
         self.server = server
         let resolvedClient = client ?? APIClient(baseURL: server)
-        let resolvedStreamClient = streamClient ?? SSEClient()
+        let resolvedStreamClient = streamClient ?? OfficialHermesStreamClient(client: resolvedClient)
         let resolvedLiveActivityManager = liveActivityManager ?? AgentLiveActivityManager.shared
         self.client = resolvedClient
         self.streamCoordinator = ChatStreamCoordinator(
@@ -786,7 +786,19 @@ final class ChatViewModel {
     func startSessionEventSync() {
         guard !didStartSessionEventSync else { return }
         didStartSessionEventSync = true
-        sessionEventStreamCoordinator.start()
+        // `/api/sessions/{id}/events` is a community-WebUI journal route, not
+        // part of the official continuity surface. Avoid opening it for an
+        // official bearer-selected session; completed-turn reconciliation is
+        // driven by the official chat stream and GET messages instead.
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard await client.continuityTransport() == .webUI else {
+                didStartSessionEventSync = false
+                return
+            }
+            guard didStartSessionEventSync else { return }
+            sessionEventStreamCoordinator.start()
+        }
     }
 
     func stopSessionEventSync() {
@@ -2622,6 +2634,13 @@ final class ChatViewModel {
         attachmentsToRestoreOnFailure: [PendingAttachment],
         modelContext: ModelContext?
     ) async -> Bool {
+        do {
+            try await client.validateChatAttachments(apiPayloads)
+        } catch {
+            sendErrorMessage = error.localizedDescription
+            lastError = error
+            return false
+        }
         isStartingChat = true
         sendErrorMessage = nil
         lastError = nil
