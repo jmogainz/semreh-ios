@@ -246,6 +246,19 @@ final class TranscriptMessageTests: XCTestCase {
         XCTAssertEqual(groups.first?.text, "First thought.\n\nSecond thought.\n\nThird thought.")
     }
 
+    func testReasoningDisplayGroupsCollapseExactServerEnvelopeOnFinalAnchor() throws {
+        let data = Data(#"{"session":{"session_id":"reasoning-group-session","messages":[{"role":"user","content":"Investigate the continuity issue.","timestamp":1771000001,"messageId":"u1"},{"role":"assistant","content":null,"reasoning":"Inspecting the canonical session identity.","timestamp":1771000002,"messageId":"a1"},{"role":"assistant","content":null,"reasoning":"Comparing WebUI and official Hermes transport behavior.","timestamp":1771000003,"messageId":"a2"},{"role":"tool","content":"Read-only transport evidence.","timestamp":1771000004,"messageId":"t1"},{"role":"assistant","content":"The completed turn is available under the same canonical session ID.","reasoning":"Synthesizing the verified findings.","timestamp":1771000005,"messageId":"a3"}]}}"#.utf8)
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let response = try decoder.decode(SessionResponse.self, from: data)
+        let messages = try XCTUnwrap(response.session?.messages)
+
+        let groups = ChatViewModel.reasoningDisplayGroups(messages: messages, archivedGroups: [])
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups.first?.anchorMessageID, "a3")
+    }
+
     func testReasoningDisplayGroupsDeduplicateNormalizedTextInFirstSeenOrder() {
         let messages = [
             ChatMessage(role: "user", content: "Investigate", timestamp: 1, messageId: "u1"),
