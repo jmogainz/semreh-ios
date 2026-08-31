@@ -231,6 +231,100 @@ final class TranscriptMessageTests: XCTestCase {
         XCTAssertEqual(window.last?.messageId, "message-999")
     }
 
+    func testReasoningDisplayGroupsAggregateOneAssistantTurnOnFinalVisibleAnchor() {
+        let messages = [
+            ChatMessage(role: "user", content: "Investigate", timestamp: 1, messageId: "u1"),
+            ChatMessage(role: "assistant", content: nil, timestamp: 2, messageId: "a1", reasoning: "First thought."),
+            ChatMessage(role: "assistant", content: nil, timestamp: 3, messageId: "a2", reasoning: "Second thought."),
+            ChatMessage(role: "assistant", content: "Final answer", timestamp: 4, messageId: "a3", reasoning: "Third thought.")
+        ]
+
+        let groups = ChatViewModel.reasoningDisplayGroups(messages: messages, archivedGroups: [])
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups.first?.anchorMessageID, "a3")
+        XCTAssertEqual(groups.first?.text, "First thought.\n\nSecond thought.\n\nThird thought.")
+    }
+
+    func testReasoningDisplayGroupsDeduplicateNormalizedTextInFirstSeenOrder() {
+        let messages = [
+            ChatMessage(role: "user", content: "Investigate", timestamp: 1, messageId: "u1"),
+            ChatMessage(role: "assistant", content: nil, timestamp: 2, messageId: "a1", reasoning: "First   thought."),
+            ChatMessage(role: "assistant", content: nil, timestamp: 3, messageId: "a2", reasoning: " Second thought. "),
+            ChatMessage(role: "assistant", content: "Final", timestamp: 4, messageId: "a3", reasoning: "First thought.")
+        ]
+
+        let group = ChatViewModel.reasoningDisplayGroups(messages: messages, archivedGroups: []).first
+
+        XCTAssertEqual(group?.text, "First   thought.\n\nSecond thought.")
+    }
+
+    func testReasoningDisplayGroupsDoNotCrossUserTurns() {
+        let messages = [
+            ChatMessage(role: "user", content: "First", timestamp: 1, messageId: "u1"),
+            ChatMessage(role: "assistant", content: "First answer", timestamp: 2, messageId: "a1", reasoning: "First thought."),
+            ChatMessage(role: "user", content: "Second", timestamp: 3, messageId: "u2"),
+            ChatMessage(role: "assistant", content: "Second answer", timestamp: 4, messageId: "a2", reasoning: "Second thought.")
+        ]
+
+        let groups = ChatViewModel.reasoningDisplayGroups(messages: messages, archivedGroups: [])
+
+        XCTAssertEqual(groups.map(\.anchorMessageID), ["a1", "a2"])
+        XCTAssertEqual(groups.map(\.text), ["First thought.", "Second thought."])
+    }
+
+    func testReasoningDisplayGroupsKeepRepeatedNoIDUserPromptsAsSeparateTurns() {
+        let messages = [
+            ChatMessage(role: "user", content: "Continue", timestamp: 1, messageId: nil),
+            ChatMessage(role: "assistant", content: "First answer", timestamp: 2, messageId: "a1", reasoning: "First thought."),
+            ChatMessage(role: "user", content: "Continue", timestamp: 3, messageId: nil),
+            ChatMessage(role: "assistant", content: "Second answer", timestamp: 4, messageId: "a2", reasoning: "Second thought.")
+        ]
+
+        let groups = ChatViewModel.reasoningDisplayGroups(messages: messages, archivedGroups: [])
+
+        XCTAssertEqual(groups.map(\.anchorMessageID), ["a1", "a2"])
+        XCTAssertEqual(groups.map(\.text), ["First thought.", "Second thought."])
+    }
+
+    func testReasoningDisplayGroupsAggregateArchivedAndMessageDerivedReasoning() {
+        let messages = [
+            ChatMessage(role: "user", content: "Investigate", timestamp: 1, messageId: "u1"),
+            ChatMessage(role: "assistant", content: "Final answer", timestamp: 2, messageId: "a2", reasoning: "Message-derived thought.")
+        ]
+        let archived = [ReasoningGroup(id: "archived-1", anchorMessageID: "a2", text: "Archived thought.")]
+
+        let groups = ChatViewModel.reasoningDisplayGroups(messages: messages, archivedGroups: archived)
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups.first?.anchorMessageID, "a2")
+        XCTAssertEqual(groups.first?.text, "Archived thought.\n\nMessage-derived thought.")
+    }
+
+    func testReasoningDisplayGroupIDIsStableAcrossMessageOffsets() {
+        let messages = [
+            ChatMessage(role: "user", content: "Investigate", timestamp: 1, messageId: "u1"),
+            ChatMessage(role: "assistant", content: "Final answer", timestamp: 2, messageId: "a1", reasoning: "Thought.")
+        ]
+
+        let first = ChatViewModel.reasoningDisplayGroups(messages: messages, messageOffset: 0, archivedGroups: [])
+        let paged = ChatViewModel.reasoningDisplayGroups(messages: messages, messageOffset: 20, archivedGroups: [])
+
+        XCTAssertEqual(first.map(\.id), paged.map(\.id))
+    }
+
+    func testHistoricalReasoningDisplayDoesNotConsumeLiveReasoningText() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("HermesMobile/Features/Chat/ChatViewModel.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("liveReasoningText: liveReasoningText"))
+        XCTAssertTrue(source.contains("archivedGroups: completedReasoningGroups"))
+        XCTAssertFalse(source.contains("reasoningDisplayGroups(messages: messages, liveReasoningText:"))
+    }
+
     func testReasoningGroupsAreMemoizedAcrossIncrementalStreamingUpdates() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

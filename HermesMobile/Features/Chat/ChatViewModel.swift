@@ -5948,27 +5948,62 @@ extension ChatViewModel {
         messageOffset: Int? = nil,
         archivedGroups: [ReasoningGroup]
     ) -> [ReasoningGroup] {
-        let turnKeysByMessageID = TranscriptTurnClassifier.assistantTurnKeysByAnchorID(
-            messages,
-            messageOffset: messageOffset
-        )
         let assistantMessagesByID = messages.enumerated().reduce(into: [String: ChatMessage]()) { result, entry in
             let message = entry.element
             guard message.role == "assistant" else { return }
             result[TranscriptTurnClassifier.anchorID(for: message, at: entry.offset, messageOffset: messageOffset)] = message
         }
-        var candidates: [ReasoningDisplayCandidate] = []
-        var order = 0
+
+        var turnKeysByMessageID: [String: String] = [:]
+        var currentTurnKey = "turn:start"
+        for (messageIndex, message) in messages.enumerated() {
+            if TranscriptTurnClassifier.isUserTurnBoundary(message) {
+                if let messageID = message.messageId?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !messageID.isEmpty {
+                    currentTurnKey = "turn:user:\(messageID)"
+                } else if let timestamp = message.timestamp {
+                    currentTurnKey = "turn:user:timestamp:\(timestamp)"
+                } else {
+                    let absoluteIndex = max(0, messageOffset ?? 0) + messageIndex
+                    currentTurnKey = "turn:user:raw:\(absoluteIndex):\(normalizedReasoningKey(message.content ?? ""))"
+                }
+            }
+
+            if message.role == "assistant" {
+                turnKeysByMessageID[TranscriptTurnClassifier.anchorID(
+                    for: message,
+                    at: messageIndex,
+                    messageOffset: messageOffset
+                )] = currentTurnKey
+            }
+        }
+
+        var buildersByTurnKey: [String: ReasoningDisplayBuilder] = [:]
+        var turnOrder: [String] = []
+
+        func append(text: String, anchorMessageID: String?, turnKey: String, visibleText: String?) {
+            guard let text = strippedVisibleAssistantEcho(fromReasoning: text, visibleText: visibleText) else {
+                return
+            }
+
+            if buildersByTurnKey[turnKey] == nil {
+                buildersByTurnKey[turnKey] = ReasoningDisplayBuilder(turnKey: turnKey)
+                turnOrder.append(turnKey)
+            }
+            buildersByTurnKey[turnKey]?.append(
+                text: text,
+                anchorMessageID: anchorMessageID,
+                visibleText: visibleText
+            )
+        }
 
         for group in archivedGroups {
             let visibleText = group.anchorMessageID.flatMap { assistantMessagesByID[$0]?.content }
-            appendReasoningCandidate(
+            append(
                 text: group.text,
                 anchorMessageID: group.anchorMessageID,
                 turnKey: group.anchorMessageID.flatMap { turnKeysByMessageID[$0] } ?? "archived:\(group.anchorMessageID ?? group.id)",
                 visibleText: visibleText,
-                order: &order,
-                candidates: &candidates
             )
         }
 
@@ -5979,32 +6014,23 @@ extension ChatViewModel {
                 messageOffset: messageOffset
             )
             let turnKey = turnKeysByMessageID[anchorID] ?? "message:\(anchorID)"
+            if message.content?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
+               buildersByTurnKey[turnKey] != nil {
+                buildersByTurnKey[turnKey]?.updateAnchor(anchorID)
+            }
             for text in reasoningTexts(from: message) {
-                appendReasoningCandidate(
+                append(
                     text: text,
                     anchorMessageID: anchorID,
                     turnKey: turnKey,
                     visibleText: message.content,
-                    order: &order,
-                    candidates: &candidates
                 )
             }
         }
 
-        var latestCandidateIndexByKey: [String: Int] = [:]
-        for (index, candidate) in candidates.enumerated() {
-            latestCandidateIndexByKey["\(candidate.turnKey)::\(normalizedReasoningKey(candidate.text))"] = index
-        }
-
-        return candidates.enumerated().compactMap { index, candidate in
-            let key = "\(candidate.turnKey)::\(normalizedReasoningKey(candidate.text))"
-            guard latestCandidateIndexByKey[key] == index else { return nil }
-
-            return ReasoningGroup(
-                id: "reasoning-\(candidate.anchorMessageID ?? "unanchored")-\(candidate.order)",
-                anchorMessageID: candidate.anchorMessageID,
-                text: candidate.text
-            )
+        return turnOrder.compactMap { turnKey in
+            guard let builder = buildersByTurnKey[turnKey] else { return nil }
+            return builder.group
         }
     }
 
@@ -6074,29 +6100,6 @@ extension ChatViewModel {
             let afterRenderID = transcriptMessages.last { $0.loadedIndex <= loadedIndex }?.renderID
             return CompressionReferenceCard(referenceText: resolution.referenceText, afterRenderID: afterRenderID)
         }
-    }
-
-    nonisolated private static func appendReasoningCandidate(
-        text: String,
-        anchorMessageID: String?,
-        turnKey: String,
-        visibleText: String?,
-        order: inout Int,
-        candidates: inout [ReasoningDisplayCandidate]
-    ) {
-        guard let text = strippedVisibleAssistantEcho(fromReasoning: text, visibleText: visibleText) else {
-            return
-        }
-
-        candidates.append(
-            ReasoningDisplayCandidate(
-                order: order,
-                anchorMessageID: anchorMessageID,
-                turnKey: turnKey,
-                text: text
-            )
-        )
-        order += 1
     }
 
     nonisolated private static func reasoningTexts(from message: ChatMessage) -> [String] {
@@ -6204,11 +6207,40 @@ extension ChatViewModel {
     }
 }
 
-private struct ReasoningDisplayCandidate {
-    let order: Int
-    let anchorMessageID: String?
+private struct ReasoningDisplayBuilder {
     let turnKey: String
-    let text: String
+    private(set) var anchorMessageID: String?
+    private(set) var segments: [String] = []
+    private var normalizedSegments: Set<String> = []
+
+    init(turnKey: String) {
+        self.turnKey = turnKey
+    }
+
+    mutating func append(text: String, anchorMessageID: String?, visibleText: String?) {
+        if let visibleText, !visibleText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            self.anchorMessageID = anchorMessageID
+        }
+
+        let normalizedText = text
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        guard normalizedSegments.insert(normalizedText).inserted else { return }
+        segments.append(text)
+    }
+
+    mutating func updateAnchor(_ anchorMessageID: String) {
+        self.anchorMessageID = anchorMessageID
+    }
+
+    var group: ReasoningGroup {
+        ReasoningGroup(
+            id: "reasoning-turn-\(turnKey)",
+            anchorMessageID: anchorMessageID,
+            text: segments.joined(separator: "\n\n")
+        )
+    }
 }
 
 private extension ToolCall {
