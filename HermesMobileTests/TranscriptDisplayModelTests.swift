@@ -297,6 +297,71 @@ final class TranscriptMessageTests: XCTestCase {
         )
     }
 
+    func testStreamingMessageStorageDoesNotPublishTheWholeHistoryArray() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("HermesMobile/Features/Chat/ChatViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        XCTAssertTrue(
+            source.contains("@ObservationIgnored private(set) var messages: [ChatMessage]"),
+            "Publishing the complete messages array makes each live-row replacement retain/copy history-sized storage."
+        )
+        XCTAssertTrue(
+            source.contains("private(set) var transcriptRenderRevision"),
+            "An explicit lightweight revision must remain the observable transcript invalidation signal."
+        )
+    }
+
+    func testStreamingPendingTextUsesOneAppendOnlyBuffer() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("HermesMobile/Features/Chat/ChatViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        XCTAssertTrue(source.contains("pendingAssistantTextBuffer: String"))
+        XCTAssertFalse(
+            source.contains("pendingAssistantTokenChunks.joined()"),
+            "Joining every queued token for dedup and pacing repeatedly copies the pending response."
+        )
+    }
+
+    func testStreamingReasoningUsesOneAppendOnlyBuffer() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("HermesMobile/Features/Chat/ChatViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        XCTAssertTrue(source.contains("pendingReasoningTextBuffer: String"))
+        XCTAssertFalse(
+            source.contains("pendingReasoningChunks.joined()"),
+            "Reasoning bursts must not repeatedly join every pending event before presentation."
+        )
+    }
+
+    func testStreamingFlushUsesCachedLiveMessageIndex() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("HermesMobile/Features/Chat/ChatViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let appendStart = try XCTUnwrap(source.range(of: "private func appendAssistantToken"))
+        let appendEnd = try XCTUnwrap(
+            source.range(of: "private func deduplicatedReplayToken", range: appendStart.upperBound..<source.endIndex)
+        )
+        let hotPath = String(source[appendStart.lowerBound..<appendEnd.lowerBound])
+
+        XCTAssertTrue(source.contains("streamingAssistantMessageIndex"))
+        XCTAssertTrue(hotPath.contains("streamingAssistantMessagePosition"))
+        XCTAssertFalse(
+            hotPath.contains("messages.firstIndex"),
+            "Every token/flush must not scan the entire loaded history to find the live tail row."
+        )
+    }
+
     func testTranscriptUsesLazyRowConstructionForLongConversations() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

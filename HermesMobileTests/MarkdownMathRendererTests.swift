@@ -608,6 +608,26 @@ final class MarkdownMathRendererTests: XCTestCase {
             .tooManyLines
         )
     }
+
+    func testCompletedCodeHighlightingRunsOnDedicatedWorker() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("HermesMobile/Features/Chat/MarkdownRenderer.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let updateStart = try XCTUnwrap(source.range(of: "private func updateHighlightedCode"))
+        let updateEnd = try XCTUnwrap(
+            source.range(of: "private var displayLanguage", range: updateStart.upperBound..<source.endIndex)
+        )
+        let updateSource = String(source[updateStart.lowerBound..<updateEnd.lowerBound])
+
+        XCTAssertTrue(source.contains("actor MarkdownCodeHighlightWorker"))
+        XCTAssertTrue(updateSource.contains("await MarkdownCodeHighlightWorker.shared.highlightedCode"))
+        XCTAssertFalse(
+            updateSource.contains("MarkdownCodeHighlighter.highlightedCode"),
+            "Completed syntax highlighting must not parse and color code synchronously on MainActor."
+        )
+    }
 }
 
 private func foregroundColorSignatures(in attributedString: NSAttributedString, userInterfaceStyle: UIUserInterfaceStyle) -> Set<String> {

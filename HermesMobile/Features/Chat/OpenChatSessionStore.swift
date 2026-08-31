@@ -6,9 +6,13 @@ import SwiftData
 @Observable
 final class OpenChatSessionStore {
     static let shared = OpenChatSessionStore()
+    static let maxRetainedIdleSessionCount = 8
 
     private var viewModels: [OpenChatSessionKey: ChatViewModel] = [:]
+    private var accessOrder: [OpenChatSessionKey] = []
     private(set) var liveOwnershipGeneration = 0
+
+    var retainedSessionCountForTesting: Int { viewModels.count }
 
     private init() {}
 
@@ -20,6 +24,7 @@ final class OpenChatSessionStore {
     ) -> ChatViewModel {
         let key = OpenChatSessionKey(server: server, sessionID: Self.normalizedSessionID(session))
         if let existing = viewModels[key] {
+            touch(key)
             existing.markReusedFromOpenSessionStore()
             // Session-event sync is owned by ChatView visibility, not store
             // retention: always-on background streams for every retained chat
@@ -35,6 +40,8 @@ final class OpenChatSessionStore {
             showsLiveActivityResponseExcerpts: showsLiveActivityResponseExcerpts
         )
         viewModels[key] = created
+        touch(key)
+        pruneInactiveSessionsIfNeeded()
         return created
     }
 
@@ -46,6 +53,8 @@ final class OpenChatSessionStore {
     ) -> ChatViewModel {
         let key = OpenChatSessionKey(server: server, sessionID: Self.normalizedSessionID(session))
         viewModels[key] = viewModel
+        touch(key)
+        pruneInactiveSessionsIfNeeded()
         noteStreamingStateChanged()
         return viewModel
     }
@@ -112,12 +121,38 @@ final class OpenChatSessionStore {
 
     func noteStreamingStateChanged() {
         liveOwnershipGeneration &+= 1
+        pruneInactiveSessionsIfNeeded()
     }
 
     func resetForTesting() {
         viewModels.values.forEach { $0.stopSessionEventSync() }
         viewModels.removeAll()
+        accessOrder.removeAll()
         liveOwnershipGeneration = 0
+    }
+
+    private func touch(_ key: OpenChatSessionKey) {
+        accessOrder.removeAll(where: { $0 == key })
+        accessOrder.append(key)
+    }
+
+    /// Keep warm reopen fast for recent conversations without retaining every
+    /// large transcript visited during the process lifetime. Running sessions
+    /// are never evicted; only the least-recent inactive models are bounded.
+    private func pruneInactiveSessionsIfNeeded() {
+        let idleKeys = accessOrder.filter { key in
+            viewModels[key]?.activeStreamID == nil
+        }
+        let excess = idleKeys.count - Self.maxRetainedIdleSessionCount
+        guard excess > 0 else { return }
+
+        for key in idleKeys.prefix(excess) {
+            guard let viewModel = viewModels.removeValue(forKey: key) else { continue }
+            viewModel.setTranscriptPresentationActive(false)
+            viewModel.stopSessionEventSync()
+            viewModel.cancelOwnedStreamStatusWatch()
+            accessOrder.removeAll(where: { $0 == key })
+        }
     }
 
     private static func normalizedSessionID(_ session: SessionSummary) -> String {

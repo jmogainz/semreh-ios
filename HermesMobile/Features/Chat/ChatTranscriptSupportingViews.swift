@@ -4,6 +4,8 @@ import UIKit
 struct ChatScrollMetrics: Equatable {
     let distanceFromBottom: CGFloat
     let isUserInteracting: Bool
+    let isDirectlyInteracting: Bool
+    let isDecelerating: Bool
 }
 
 struct ChatScrollObserver: UIViewRepresentable {
@@ -148,9 +150,12 @@ struct ChatScrollObserver: UIViewRepresentable {
             // look like a new recovery request and could feed scrollTo back
             // into this observer repeatedly.
             let distanceFromBottom = max(0, maximumOffset - currentOffset)
+            let isDirectlyInteracting = scrollView.isDragging || scrollView.isTracking
             let metrics = ChatScrollMetrics(
                 distanceFromBottom: distanceFromBottom,
-                isUserInteracting: scrollView.isDragging || scrollView.isTracking || scrollView.isDecelerating
+                isUserInteracting: isDirectlyInteracting || scrollView.isDecelerating,
+                isDirectlyInteracting: isDirectlyInteracting,
+                isDecelerating: scrollView.isDecelerating
             )
             guard metrics != lastMetrics else { return }
 
@@ -158,8 +163,19 @@ struct ChatScrollObserver: UIViewRepresentable {
 
             switch delivery {
             case .immediate:
+                pendingMetrics = nil
+                hasScheduledMetricDelivery = false
                 onMetrics(metrics)
             case .deferred:
+                if metrics.isDirectlyInteracting {
+                    // A drag must invalidate restore before a later main-queue
+                    // geometry callback can reissue the saved scroll target.
+                    pendingMetrics = nil
+                    hasScheduledMetricDelivery = false
+                    onMetrics(metrics)
+                    return
+                }
+
                 pendingMetrics = metrics
                 guard !hasScheduledMetricDelivery else { return }
 

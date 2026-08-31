@@ -254,6 +254,51 @@ final class ChatScrollPolicyTests: XCTestCase {
         )
     }
 
+    func testExplicitBottomJumpStaysVisibleUntilViewportActuallyArrives() {
+        XCTAssertTrue(
+            ChatScrollPolicy.shouldShowScrollToBottomButton(
+                isNearBottom: false,
+                hasExplicitBottomRequest: true,
+                hasActiveStream: true,
+                shouldFollowLatestMessage: true
+            )
+        )
+        XCTAssertFalse(
+            ChatScrollPolicy.shouldShowScrollToBottomButton(
+                isNearBottom: true,
+                hasExplicitBottomRequest: true,
+                hasActiveStream: true,
+                shouldFollowLatestMessage: true
+            )
+        )
+    }
+
+    func testExplicitBottomJumpRetriesAcrossLazyLayoutSettlement() {
+        XCTAssertGreaterThanOrEqual(ChatScrollPolicy.explicitBottomSettlementDelays.count, 4)
+        XCTAssertEqual(ChatScrollPolicy.explicitBottomSettlementDelays.first, 0)
+        XCTAssertTrue(
+            zip(
+                ChatScrollPolicy.explicitBottomSettlementDelays,
+                ChatScrollPolicy.explicitBottomSettlementDelays.dropFirst()
+            ).allSatisfy(<)
+        )
+    }
+
+    func testTrailingDecelerationDoesNotCancelExplicitBottomJump() {
+        XCTAssertFalse(
+            ChatScrollPolicy.shouldCancelExplicitBottomRequest(
+                isDirectlyInteracting: false,
+                isDecelerating: true
+            )
+        )
+        XCTAssertTrue(
+            ChatScrollPolicy.shouldCancelExplicitBottomRequest(
+                isDirectlyInteracting: true,
+                isDecelerating: false
+            )
+        )
+    }
+
     func testFirstEnterWithNoSavedPointRestoresLatest() {
         XCTAssertEqual(
             ChatTranscriptRestorePolicy.target(
@@ -304,6 +349,189 @@ final class ChatScrollPolicyTests: XCTestCase {
     func testAppearMustProgrammaticallyRestoreWhenTheTranscriptHasRows() {
         XCTAssertTrue(ChatTranscriptRestorePolicy.shouldProgrammaticallyRestoreOnAppear(hasMessages: true))
         XCTAssertFalse(ChatTranscriptRestorePolicy.shouldProgrammaticallyRestoreOnAppear(hasMessages: false))
+    }
+
+    func testRestoreRetriesAcrossFarLazyLayoutSettlement() {
+        XCTAssertGreaterThanOrEqual(ChatTranscriptRestorePolicy.settlementDelays.count, 5)
+        XCTAssertEqual(ChatTranscriptRestorePolicy.settlementDelays.first, 0)
+        XCTAssertTrue(
+            zip(
+                ChatTranscriptRestorePolicy.settlementDelays,
+                ChatTranscriptRestorePolicy.settlementDelays.dropFirst()
+            ).allSatisfy(<)
+        )
+    }
+
+    func testRestoreStopsOnlyAfterTheRequestedViewportArrives() {
+        XCTAssertFalse(
+            ChatTranscriptRestorePolicy.hasReachedTarget(
+                .message(id: "transcript:20"),
+                firstVisibleMessageID: "transcript:53",
+                isNearBottom: false
+            )
+        )
+        XCTAssertTrue(
+            ChatTranscriptRestorePolicy.hasReachedTarget(
+                .message(id: "transcript:20"),
+                firstVisibleMessageID: "transcript:20",
+                isNearBottom: false
+            )
+        )
+        XCTAssertTrue(
+            ChatTranscriptRestorePolicy.hasReachedTarget(
+                .latest,
+                firstVisibleMessageID: nil,
+                isNearBottom: true
+            )
+        )
+    }
+
+    func testLatestRestoreCannotSettleFromDefaultNearBottomBeforeAnAttemptOrMetrics() {
+        var state = ChatTranscriptRestoreState()
+
+        XCTAssertFalse(
+            state.shouldSettle(
+                target: .latest,
+                firstVisibleMessageID: nil,
+                isNearBottom: true
+            ),
+            "the view's initial near-bottom default is not a geometry sample"
+        )
+
+        state.recordRestoreAttempt()
+
+        XCTAssertTrue(
+            state.shouldSettle(
+                target: .latest,
+                firstVisibleMessageID: nil,
+                isNearBottom: true
+            )
+        )
+    }
+
+    func testConfirmedGeometryCanSettleLatestWithoutIssuingAnAttempt() {
+        var state = ChatTranscriptRestoreState()
+        state.recordMetrics(
+            isNearBottom: true,
+            isDirectlyInteracting: false,
+            isDecelerating: false
+        )
+
+        XCTAssertTrue(
+            state.shouldSettle(
+                target: .latest,
+                firstVisibleMessageID: nil,
+                isNearBottom: true
+            )
+        )
+    }
+
+    func testMessageRestoreRetriesUntilTheRequestedRowIsObserved() {
+        var state = ChatTranscriptRestoreState()
+        let visibleRows = ["transcript:53", "transcript:41", "transcript:20"]
+        var attempts = 0
+
+        for visibleRow in visibleRows {
+            guard !state.shouldSettle(
+                target: .message(id: "transcript:20"),
+                firstVisibleMessageID: visibleRow,
+                isNearBottom: false
+            ) else { break }
+
+            state.recordRestoreAttempt()
+            attempts += 1
+        }
+
+        XCTAssertEqual(attempts, 2)
+        XCTAssertTrue(
+            state.shouldSettle(
+                target: .message(id: "transcript:20"),
+                firstVisibleMessageID: "transcript:20",
+                isNearBottom: false
+            )
+        )
+    }
+
+    func testDirectRestoreInteractionCancelsPendingSettlement() {
+        var state = ChatTranscriptRestoreState()
+        state.recordRestoreAttempt()
+        state.recordMetrics(
+            isNearBottom: false,
+            isDirectlyInteracting: true,
+            isDecelerating: false
+        )
+
+        XCTAssertTrue(state.isCancelled)
+        XCTAssertFalse(
+            state.shouldSettle(
+                target: .latest,
+                firstVisibleMessageID: nil,
+                isNearBottom: true
+            )
+        )
+    }
+
+    func testPreRestoreDirectInteractionSurvivesApplyingSameRestoreRequest() {
+        var state = ChatTranscriptRestoreState()
+        state.recordMetrics(
+            isNearBottom: false,
+            isDirectlyInteracting: true,
+            isDecelerating: false
+        )
+
+        XCTAssertFalse(
+            state.beginRestore(token: 1),
+            "applying the pending restore must not resurrect programmatic scrolling"
+        )
+        XCTAssertTrue(state.isCancelled)
+        XCTAssertFalse(state.hasIssuedRestoreAttempt)
+        XCTAssertFalse(
+            state.shouldSettle(
+                target: .latest,
+                firstVisibleMessageID: nil,
+                isNearBottom: true
+            )
+        )
+
+        XCTAssertFalse(state.beginRestore(token: 1))
+        XCTAssertTrue(state.isCancelled)
+
+        XCTAssertTrue(state.beginRestore(token: 2))
+        state.recordRestoreAttempt()
+        XCTAssertTrue(
+            state.shouldSettle(
+                target: .latest,
+                firstVisibleMessageID: nil,
+                isNearBottom: true
+            )
+        )
+    }
+
+    func testDecelerationAndAsynchronousGeometryDoNotCancelRestore() {
+        var deceleratingState = ChatTranscriptRestoreState()
+        deceleratingState.recordRestoreAttempt()
+        deceleratingState.recordMetrics(
+            isNearBottom: true,
+            isDirectlyInteracting: false,
+            isDecelerating: true
+        )
+        XCTAssertFalse(deceleratingState.isCancelled)
+        XCTAssertTrue(
+            deceleratingState.shouldSettle(
+                target: .latest,
+                firstVisibleMessageID: nil,
+                isNearBottom: true
+            )
+        )
+
+        var asynchronousGeometryState = ChatTranscriptRestoreState()
+        asynchronousGeometryState.recordRestoreAttempt()
+        asynchronousGeometryState.recordMetrics(
+            isNearBottom: false,
+            isDirectlyInteracting: false,
+            isDecelerating: false
+        )
+        XCTAssertFalse(asynchronousGeometryState.isCancelled)
     }
 
 
@@ -357,6 +585,24 @@ final class ChatScrollPolicyTests: XCTestCase {
                 isUserInteracting: false
             )
         )
+    }
+
+    func testDebugPerformanceLabUsesTheRealChatSurfaceWithTenThousandRows() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let appSource = try String(
+            contentsOf: sourceURL.appendingPathComponent("HermesMobile/HermesMobileApp.swift"),
+            encoding: .utf8
+        )
+        let viewModelSource = try String(
+            contentsOf: sourceURL.appendingPathComponent("HermesMobile/Features/Chat/ChatViewModel.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(appSource.contains("--chat-performance-lab"))
+        XCTAssertTrue(appSource.contains("ChatPerformanceLabView"))
+        XCTAssertTrue(viewModelSource.contains("seedPerformanceLab(messageCount: 10_000)"))
     }
 
 }

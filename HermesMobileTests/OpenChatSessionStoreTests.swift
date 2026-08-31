@@ -148,6 +148,32 @@ final class OpenChatSessionStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testStoreBoundsInactiveConversationRetentionByRecency() throws {
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let first = OpenChatSessionStore.shared.viewModel(
+            session: SessionSummary(sessionId: "session-0"),
+            server: server
+        )
+
+        for index in 1...12 {
+            _ = OpenChatSessionStore.shared.viewModel(
+                session: SessionSummary(sessionId: "session-\(index)"),
+                server: server
+            )
+        }
+
+        XCTAssertEqual(
+            OpenChatSessionStore.shared.retainedSessionCountForTesting,
+            OpenChatSessionStore.maxRetainedIdleSessionCount
+        )
+        let reopenedFirst = OpenChatSessionStore.shared.viewModel(
+            session: SessionSummary(sessionId: "session-0"),
+            server: server
+        )
+        XCTAssertFalse(reopenedFirst === first, "The least-recent inactive model should be evicted")
+    }
+
+    @MainActor
     func testLeaveDoesNotSuspendALiveRunAndReopenDoesNotNeedSessionFetch() async throws {
         let streamClient = SpySSEStreamingClient()
         var sessionFetchCount = 0

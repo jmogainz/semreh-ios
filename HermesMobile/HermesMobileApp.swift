@@ -50,8 +50,14 @@ struct HermesMobileApp: App {
             #if DEBUG
             // Launch argument hooks for deterministic, server-free simulator diagnosis:
             // `xcrun simctl launch <udid> com.jacobmoore.semreh --streaming-lab`
+            // `xcrun simctl launch <udid> com.jacobmoore.semreh --chat-performance-lab`
             // `xcrun simctl launch <udid> com.jacobmoore.semreh --sidebar-brand-lab`
-            if ProcessInfo.processInfo.arguments.contains("--sidebar-brand-lab") {
+            if ProcessInfo.processInfo.arguments.contains("--chat-performance-lab") {
+                NavigationStack {
+                    ChatPerformanceLabView()
+                }
+                .semrehAppTheme()
+            } else if ProcessInfo.processInfo.arguments.contains("--sidebar-brand-lab") {
                 SidebarBrandLabView()
                     .semrehAppTheme()
                     .preferredColorScheme(AppTheme.storedValue(appThemeRawValue).colorScheme)
@@ -80,6 +86,25 @@ struct HermesMobileApp: App {
 }
 
 #if DEBUG
+private struct ChatPerformanceLabView: View {
+    private let fixture: (session: SessionSummary, server: URL, viewModel: ChatViewModel)
+
+    init() {
+        fixture = ChatViewModel.makePerformanceLabFixture()
+    }
+
+    var body: some View {
+        ChatView(
+            session: fixture.session,
+            server: fixture.server,
+            onAPIError: { _ in },
+            loadsInitialMessages: false,
+            retainedViewModel: fixture.viewModel,
+            disablesExternalLifecycle: true
+        )
+    }
+}
+
 private struct SidebarBrandLabView: View {
     var body: some View {
         ZStack {
