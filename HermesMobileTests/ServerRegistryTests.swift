@@ -74,6 +74,15 @@ final class ServerRegistryTests: XCTestCase {
         XCTAssertEqual(reader.activeServer?.id, "https://example.test")
     }
 
+    func testLegacyServerAccountDecodesWithoutOfficialContinuityMetadata() throws {
+        let data = Data(##"{"id":"https://example.test","urlString":"https://example.test","displayName":"Example","initials":"EX","headerLogoColorHex":"#5B7CFF","customHeadersRef":"https://example.test"}"##.utf8)
+
+        let account = try JSONDecoder().decode(ServerAccount.self, from: data)
+
+        XCTAssertEqual(account.id, "https://example.test")
+        XCTAssertNil(account.officialAPIURLString)
+    }
+
     func testActivatingTheAlreadyActiveServerDoesNotRewriteTheKeychain() throws {
         let keychain = InMemoryKeychainStore()
         let registry = makeRegistry(keychain: keychain)

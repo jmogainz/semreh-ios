@@ -33,6 +33,9 @@ struct ServerAccount: Codable, Identifiable, Equatable, Sendable {
     /// a Keychain key scoped by that id (`AuthManager` scopes by the equivalent
     /// normalized URL string), so server A's proxy token is never sent to server B.
     var customHeadersRef: String?
+    /// Optional official Hermes API base URL; the bearer secret is never part
+    /// of this registry blob and lives in the scoped Keychain.
+    var officialAPIURLString: String?
     var createdAt: Date
     var updatedAt: Date
 
@@ -44,7 +47,8 @@ struct ServerAccount: Codable, Identifiable, Equatable, Sendable {
         headerLogoColorHex: String,
         customHeadersRef: String?,
         createdAt: Date,
-        updatedAt: Date
+        updatedAt: Date,
+        officialAPIURLString: String? = nil
     ) {
         self.id = id
         self.urlString = urlString
@@ -52,6 +56,7 @@ struct ServerAccount: Codable, Identifiable, Equatable, Sendable {
         self.initials = initials
         self.headerLogoColorHex = headerLogoColorHex
         self.customHeadersRef = customHeadersRef
+        self.officialAPIURLString = officialAPIURLString
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -63,6 +68,7 @@ struct ServerAccount: Codable, Identifiable, Equatable, Sendable {
         case initials
         case headerLogoColorHex
         case customHeadersRef
+        case officialAPIURLString
         case createdAt
         case updatedAt
     }
@@ -87,6 +93,7 @@ struct ServerAccount: Codable, Identifiable, Equatable, Sendable {
         headerLogoColorHex = try container.decodeIfPresent(String.self, forKey: .headerLogoColorHex)
             ?? HeaderLogoColor.defaultHex
         customHeadersRef = try container.decodeIfPresent(String.self, forKey: .customHeadersRef)
+        officialAPIURLString = try? container.decode(String.self, forKey: .officialAPIURLString)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date(timeIntervalSince1970: 0)
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
     }

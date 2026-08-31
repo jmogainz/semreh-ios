@@ -33,20 +33,27 @@ actor APIClient {
     /// Internal, not private, because the upload and transcribe extensions build
     /// their multipart requests by hand and need the same header injection (#61).
     let customHeaderProvider: @Sendable () -> [CustomHeader]
-    /// Optional sidecar. When absent, this client is byte-for-byte the WebUI
-    /// client, including its base URL, headers, and endpoint selection.
-    nonisolated let officialContinuityClient: OfficialHermesContinuityClient?
+    /// Optional explicit sidecar for tests/specialized callers. Otherwise the
+    /// process-wide store is consulted dynamically so Settings changes affect
+    /// already-open Sessions/Chat view models without rebuilding API clients.
+    private nonisolated let injectedOfficialContinuityClient: OfficialHermesContinuityClient?
+    private nonisolated let officialConfigurationStore: OfficialContinuityConfigurationStore
+    nonisolated var officialContinuityClient: OfficialHermesContinuityClient? {
+        injectedOfficialContinuityClient ?? officialConfigurationStore.client(for: baseURL)
+    }
 
     init(
         baseURL: URL,
         session: URLSession? = nil,
         publicMediaSession: URLSession? = nil,
         customHeaderProvider: @escaping @Sendable () -> [CustomHeader] = { CustomHeaderStore.shared.snapshot() },
-        officialContinuityClient: OfficialHermesContinuityClient? = nil
+        officialContinuityClient: OfficialHermesContinuityClient? = nil,
+        officialConfigurationStore: OfficialContinuityConfigurationStore = .shared
     ) {
         self.baseURL = baseURL
         self.customHeaderProvider = customHeaderProvider
-        self.officialContinuityClient = officialContinuityClient
+        self.injectedOfficialContinuityClient = officialContinuityClient
+        self.officialConfigurationStore = officialConfigurationStore
 
         // One redirect guard shared by both sessions (same origin + same header
         // provider). Wired into the default sessions so a server-issued

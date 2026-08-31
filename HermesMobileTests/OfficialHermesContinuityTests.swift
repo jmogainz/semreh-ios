@@ -136,6 +136,62 @@ final class OfficialHermesContinuityTests: APIClientTestCase {
     XCTAssertEqual(parser.consume(line: "event: run.completed")?.event, "assistant.delta")
   }
 
+  func testConfigurationStoreIsolatesServersAndAPIClientUsesMatchingSidecar() async throws {
+    let session = makeSession()
+    let store = OfficialContinuityConfigurationStore(factory: { url, key in
+      OfficialHermesContinuityClient(baseURL: url, session: session, customHeaderProvider: {
+        [CustomHeader(name: "Authorization", value: "Bearer \(key)")]
+      })
+    })
+    let primaryA = URL(string: "https://a.test")!
+    let primaryB = URL(string: "https://b.test")!
+    store.configure(primaryURL: primaryA, officialURL: URL(string: "https://official-a.test")!, bearerKey: "a")
+    store.configure(primaryURL: primaryB, officialURL: URL(string: "https://official-b.test")!, bearerKey: "b")
+    MockURLProtocol.requestHandler = { request in
+      XCTAssertTrue(request.url?.host == "official-a.test" || request.url?.host == "official-b.test")
+      XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer " + (request.url?.host == "official-a.test" ? "a" : "b"))
+      return self.response(#"{"data":[]}"#, request)
+    }
+    let a = APIClient(baseURL: primaryA, session: session, officialConfigurationStore: store)
+    let b = APIClient(baseURL: primaryB, session: session, officialConfigurationStore: store)
+    let aSessions = try await a.officialSessionsResponse()
+    let bSessions = try await b.officialSessionsResponse()
+    XCTAssertEqual(aSessions.sessions?.count, 0)
+    XCTAssertEqual(bSessions.sessions?.count, 0)
+    let unmatched = APIClient(baseURL: URL(string: "https://none.test")!, session: session, officialConfigurationStore: store)
+    let unmatchedTransport = await unmatched.continuityTransport()
+    XCTAssertEqual(unmatchedTransport, .webUI)
+  }
+
+  func testExistingAPIClientObservesSidecarEnableAndDisableImmediately() async {
+    let session = makeSession()
+    let store = OfficialContinuityConfigurationStore(factory: { url, key in
+      OfficialHermesContinuityClient(baseURL: url, session: session, customHeaderProvider: {
+        [CustomHeader(name: "Authorization", value: "Bearer \(key)")]
+      })
+    })
+    let primary = URL(string: "https://webui.test")!
+    let client = APIClient(baseURL: primary, session: session, officialConfigurationStore: store)
+    let initialTransport = await client.continuityTransport()
+    XCTAssertEqual(initialTransport, .webUI)
+
+    MockURLProtocol.requestHandler = { request in
+      XCTAssertEqual(request.url?.host, "official.test")
+      return self.response(self.capabilities, request)
+    }
+    store.configure(
+      primaryURL: primary,
+      officialURL: URL(string: "https://official.test")!,
+      bearerKey: "sidecar-secret"
+    )
+    let enabledTransport = await client.continuityTransport()
+    XCTAssertEqual(enabledTransport, .official)
+
+    store.remove(primaryURL: primary)
+    let disabledTransport = await client.continuityTransport()
+    XCTAssertEqual(disabledTransport, .webUI)
+  }
+
   private func makeSession() -> URLSession {
     let c = URLSessionConfiguration.ephemeral
     c.protocolClasses = [MockURLProtocol.self]

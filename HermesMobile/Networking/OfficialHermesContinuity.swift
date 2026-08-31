@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 enum HermesContinuityTransport: Equatable {
   case official
@@ -161,6 +162,12 @@ final class OfficialHermesContinuityClient: @unchecked Sendable {
     decoder.keyDecodingStrategy = .convertFromSnakeCase
     encoder.keyEncodingStrategy = .convertToSnakeCase
   }
+  convenience init(
+    baseURL: URL,
+    customHeaderProvider: @escaping @Sendable () -> [CustomHeader]
+  ) {
+    self.init(baseURL: baseURL, session: URLSession(configuration: .default), customHeaderProvider: customHeaderProvider)
+  }
   func isCapabilityValid() async -> Bool {
     lock.lock()
     if let capability {
@@ -179,6 +186,11 @@ final class OfficialHermesContinuityClient: @unchecked Sendable {
       lock.unlock()
     }
     return capability == true
+  }
+  func probeSessionContinuity() async throws {
+    let health: HealthResponse = try await send(.health, method: "GET")
+    guard health.status == "ok" else { throw APIError.http(statusCode: 200, body: "Unexpected health status.") }
+    guard await isCapabilityValid() else { throw OfficialHermesContinuityError.missingPayload }
   }
   func validate(attachments: [JSONValue]?) async throws {
     guard attachments?.isEmpty == false, await isCapabilityValid() else { return }
@@ -306,6 +318,34 @@ final class OfficialHermesContinuityClient: @unchecked Sendable {
     }
     return try decoder.decode(R.self, from: d)
   }
+}
+
+/// Process-wide official sidecar configurations, indexed by the normalized
+/// primary WebUI URL. Secrets are held only in memory after Keychain hydration.
+final class OfficialContinuityConfigurationStore: @unchecked Sendable {
+  static let shared = OfficialContinuityConfigurationStore()
+  private let storage = OSAllocatedUnfairLock(initialState: [String: OfficialHermesContinuityClient]())
+  private let factory: @Sendable (URL, String) -> OfficialHermesContinuityClient
+
+  private func key(for primaryURL: URL) -> String {
+    (try? AuthManager.normalizedServerURL(from: primaryURL.absoluteString))?.absoluteString
+      ?? primaryURL.absoluteString
+  }
+
+  init(factory: @escaping @Sendable (URL, String) -> OfficialHermesContinuityClient = { url, key in
+    OfficialHermesContinuityClient(baseURL: url, customHeaderProvider: {
+      [CustomHeader(name: "Authorization", value: "Bearer \(key)")]
+    })
+  }) { self.factory = factory }
+
+  func client(for primaryURL: URL) -> OfficialHermesContinuityClient? {
+    storage.withLock { $0[key(for: primaryURL)] }
+  }
+  func configure(primaryURL: URL, officialURL: URL, bearerKey: String) {
+    let client = factory(officialURL, bearerKey)
+    storage.withLock { $0[key(for: primaryURL)] = client }
+  }
+  func remove(primaryURL: URL) { storage.withLock { $0.removeValue(forKey: key(for: primaryURL)) } }
 }
 private struct AnyEncodable: Encodable {
   let value: Encodable
