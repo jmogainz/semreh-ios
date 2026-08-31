@@ -2,14 +2,39 @@ import Foundation
 
 enum SessionNavigationDestination: Hashable, Identifiable {
     case session(SessionSummary)
-    case newChat(PendingNewChatRoute)
+    case newChat(session: SessionSummary, route: PendingNewChatRoute)
     case utility(SessionListUtilityDestination)
 
     var id: Self { self }
 
     var selectedSessionID: String? {
-        guard case .session(let session) = self else { return nil }
-        return session.sessionId
+        switch self {
+        case .session(let session), .newChat(let session, _):
+            return session.sessionId
+        case .utility:
+            return nil
+        }
+    }
+
+    var loadsInitialMessages: Bool {
+        if case .session = self { return true }
+        return false
+    }
+}
+
+enum SessionNewChatExternalRequestKind: Equatable {
+    case sharedImport
+    case appIntent
+}
+
+enum SessionNewChatExternalRequestPolicy {
+    static func next(
+        sharedImportPending: Bool,
+        appIntentPending: Bool
+    ) -> SessionNewChatExternalRequestKind? {
+        if sharedImportPending { return .sharedImport }
+        if appIntentPending { return .appIntent }
+        return nil
     }
 }
 
@@ -22,7 +47,7 @@ struct SessionNavigationState: Equatable {
     private(set) var destination: SessionNavigationDestination?
     private(set) var lastSelectedSessionID: String?
     private(set) var rootRevision = 0
-    private var newChatSessionID: String?
+    private var pendingNewChatRoute: PendingNewChatRoute?
     private var deepLinkedSessionLoadID: String?
     private var destinationOrigin: DestinationOrigin?
 
@@ -31,7 +56,7 @@ struct SessionNavigationState: Equatable {
     }
 
     var selectedSessionID: String? {
-        destination?.selectedSessionID ?? newChatSessionID
+        destination?.selectedSessionID
     }
 
     var isConversationPresented: Bool {
@@ -44,28 +69,49 @@ struct SessionNavigationState: Equatable {
     }
 
     var isCreatingNewChat: Bool {
-        guard case .newChat = destination else { return false }
-        return newChatSessionID == nil
+        pendingNewChatRoute != nil
     }
 
     mutating func select(_ session: SessionSummary) {
         rootRevision += 1
-        newChatSessionID = nil
+        pendingNewChatRoute = nil
         destination = .session(session)
         destinationOrigin = .explicit
         remember(session)
     }
 
-    mutating func select(_ route: PendingNewChatRoute) {
+    @discardableResult
+    mutating func beginNewChatCreation(_ route: PendingNewChatRoute) -> Bool {
+        guard pendingNewChatRoute == nil else { return false }
+        pendingNewChatRoute = route
+        return true
+    }
+
+    @discardableResult
+    mutating func completeNewChatCreation(
+        _ session: SessionSummary,
+        for route: PendingNewChatRoute
+    ) -> Bool {
+        guard pendingNewChatRoute?.id == route.id,
+              Self.normalized(session.sessionId) != nil
+        else { return false }
+
         rootRevision += 1
-        newChatSessionID = nil
-        destination = .newChat(route)
+        pendingNewChatRoute = nil
+        destination = .newChat(session: session, route: route)
         destinationOrigin = .explicit
+        remember(session)
+        return true
+    }
+
+    mutating func cancelNewChatCreation(for route: PendingNewChatRoute? = nil) {
+        guard route == nil || pendingNewChatRoute?.id == route?.id else { return }
+        pendingNewChatRoute = nil
     }
 
     mutating func select(_ utility: SessionListUtilityDestination) {
         rootRevision += 1
-        newChatSessionID = nil
+        pendingNewChatRoute = nil
         destination = .utility(utility)
         destinationOrigin = .explicit
     }
@@ -73,14 +119,11 @@ struct SessionNavigationState: Equatable {
     mutating func remember(_ session: SessionSummary) {
         guard let sessionID = Self.normalized(session.sessionId) else { return }
         lastSelectedSessionID = sessionID
-        if case .newChat = destination {
-            newChatSessionID = sessionID
-        }
     }
 
     mutating func clearDestination() {
         destination = nil
-        newChatSessionID = nil
+        pendingNewChatRoute = nil
         destinationOrigin = nil
     }
 
@@ -91,7 +134,7 @@ struct SessionNavigationState: Equatable {
     mutating func resetForShellSurfaceSwitch() {
         destination = nil
         lastSelectedSessionID = nil
-        newChatSessionID = nil
+        pendingNewChatRoute = nil
         destinationOrigin = nil
     }
 
@@ -120,6 +163,7 @@ struct SessionNavigationState: Equatable {
         pendingDeepLinkedSessionID: String? = nil
     ) {
         guard destination == nil,
+              pendingNewChatRoute == nil,
               deepLinkedSessionLoadID == nil,
               Self.normalized(pendingDeepLinkedSessionID) == nil,
               let lastSelectedSessionID
@@ -164,7 +208,7 @@ struct SessionNavigationState: Equatable {
                 return
             }
             destination = nil
-            newChatSessionID = nil
+            pendingNewChatRoute = nil
             destinationOrigin = nil
             if lastSelectedSessionID == selectedID {
                 lastSelectedSessionID = nil
@@ -182,7 +226,7 @@ struct SessionNavigationState: Equatable {
 
         if selectedSessionID == sessionID {
             destination = nil
-            newChatSessionID = nil
+            pendingNewChatRoute = nil
             destinationOrigin = nil
         }
 

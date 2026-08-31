@@ -308,13 +308,15 @@ final class SessionNavigationStateTests: XCTestCase {
 
     func testExplicitNewChatRouteOverridesStoredSelection() {
         let route = PendingNewChatRoute(initialDraft: "Shared draft")
+        let created = SessionSummary(sessionId: "created-session")
         var state = SessionNavigationState(lastSelectedSessionID: "session-1")
-        state.select(route)
+        XCTAssertTrue(state.beginNewChatCreation(route))
+        XCTAssertTrue(state.completeNewChatCreation(created, for: route))
 
         state.restoreIfNeeded(from: [SessionSummary(sessionId: "session-1")])
 
-        XCTAssertEqual(state.destination, .newChat(route))
-        XCTAssertEqual(state.lastSelectedSessionID, "session-1")
+        XCTAssertEqual(state.destination, .newChat(session: created, route: route))
+        XCTAssertEqual(state.lastSelectedSessionID, "created-session")
     }
 
     func testExplicitSessionRouteOverridesStoredSelection() {
@@ -329,85 +331,162 @@ final class SessionNavigationStateTests: XCTestCase {
         XCTAssertEqual(state.lastSelectedSessionID, "deep-linked")
     }
 
-    func testCreatedSessionRemainsSelectedWhileNewChatRouteOwnsItsDraft() {
-        let route = PendingNewChatRoute(initialDraft: "Shared draft")
+    func testNewChatCreationInProgressRejectsDuplicateRequests() {
+        let firstRoute = PendingNewChatRoute()
+        let secondRoute = PendingNewChatRoute()
+        var state = SessionNavigationState()
+
+        XCTAssertTrue(state.beginNewChatCreation(firstRoute))
+        XCTAssertFalse(state.beginNewChatCreation(secondRoute))
+        XCTAssertTrue(state.isCreatingNewChat)
+        XCTAssertNil(state.destination)
+    }
+
+    func testCreatedNewChatDestinationCarriesPayloadAndSelection() {
+        let route = PendingNewChatRoute(
+            initialDraft: "Imported draft",
+            initialAttachments: [
+                SharedAttachmentImport(
+                    filename: "notes.txt",
+                    typeIdentifier: "public.text",
+                    data: Data("notes".utf8)
+                )
+            ],
+            autoStartsVoiceInput: true,
+            profileName: "work"
+        )
         let created = SessionSummary(sessionId: "created-session")
         var state = SessionNavigationState()
-        state.select(route)
-        XCTAssertTrue(state.isCreatingNewChat)
 
-        state.remember(created)
-
-        XCTAssertEqual(state.destination, .newChat(route))
+        XCTAssertTrue(state.beginNewChatCreation(route))
+        XCTAssertTrue(state.completeNewChatCreation(created, for: route))
+        XCTAssertEqual(
+            state.destination,
+            .newChat(session: created, route: route)
+        )
         XCTAssertEqual(state.selectedSessionID, "created-session")
-        XCTAssertEqual(state.lastSelectedSessionID, "created-session")
+        XCTAssertFalse(state.isCreatingNewChat)
+
+        guard case let .newChat(destinationSession, destinationRoute) = state.destination else {
+            return XCTFail("Expected a created New Chat destination")
+        }
+        XCTAssertEqual(destinationSession, created)
+        XCTAssertEqual(destinationRoute.initialDraft, "Imported draft")
+        XCTAssertEqual(destinationRoute.initialAttachments, route.initialAttachments)
+        XCTAssertTrue(destinationRoute.autoStartsVoiceInput)
+        XCTAssertEqual(destinationRoute.profileName, "work")
+    }
+
+    func testCreatedNewChatSkipsInitialMessageReloadButOrdinaryChatLoadsIt() {
+        let route = PendingNewChatRoute(initialDraft: "draft")
+        let created = SessionSummary(sessionId: "created-session")
+        var state = SessionNavigationState()
+
+        XCTAssertTrue(state.beginNewChatCreation(route))
+        XCTAssertTrue(state.completeNewChatCreation(created, for: route))
+        XCTAssertFalse(state.destination?.loadsInitialMessages == true)
+
+        state.select(SessionSummary(sessionId: "ordinary-session"))
+        XCTAssertTrue(state.destination?.loadsInitialMessages == true)
+    }
+
+    func testExternalNewChatRequestsDrainSharedImportBeforeAppIntentAfterCreation() {
+        let inFlight = PendingNewChatRoute()
+        let sharedImport = PendingNewChatRoute(initialDraft: "shared")
+        let appIntent = PendingNewChatRoute(autoStartsVoiceInput: true)
+        var state = SessionNavigationState()
+
+        XCTAssertTrue(state.beginNewChatCreation(inFlight))
+        XCTAssertEqual(
+            SessionNewChatExternalRequestPolicy.next(
+                sharedImportPending: true,
+                appIntentPending: true
+            ),
+            .sharedImport
+        )
+        XCTAssertFalse(state.beginNewChatCreation(sharedImport))
+        XCTAssertFalse(state.beginNewChatCreation(appIntent))
+
+        XCTAssertTrue(state.completeNewChatCreation(SessionSummary(sessionId: "first"), for: inFlight))
+        XCTAssertTrue(state.beginNewChatCreation(sharedImport))
+        state.cancelNewChatCreation(for: sharedImport)
+        XCTAssertFalse(state.isCreatingNewChat)
+        XCTAssertTrue(state.beginNewChatCreation(appIntent))
+        XCTAssertEqual(
+            SessionNewChatExternalRequestPolicy.next(
+                sharedImportPending: false,
+                appIntentPending: true
+            ),
+            .appIntent
+        )
+    }
+
+    func testFailedOrCancelledNewChatReleasesCreationGateForPendingRequest() {
+        let first = PendingNewChatRoute()
+        let pending = PendingNewChatRoute(initialDraft: "queued")
+        var state = SessionNavigationState()
+
+        XCTAssertTrue(state.beginNewChatCreation(first))
+        state.cancelNewChatCreation(for: first)
+        XCTAssertFalse(state.isCreatingNewChat)
+        XCTAssertTrue(state.beginNewChatCreation(pending))
+        state.cancelNewChatCreation(for: pending)
+
+        XCTAssertTrue(state.beginNewChatCreation(first))
+        XCTAssertTrue(state.completeNewChatCreation(SessionSummary(sessionId: "created"), for: first))
         XCTAssertFalse(state.isCreatingNewChat)
     }
 
-    func testSelectingAnotherNewChatRouteStartsFreshCreationState() {
-        let firstRoute = PendingNewChatRoute()
-        let secondRoute = PendingNewChatRoute()
+    func testReturningFromCreatedNewChatClearsSelectionAndRunsCleanup() {
+        let route = PendingNewChatRoute()
+        let created = SessionSummary(sessionId: "created-session")
         var state = SessionNavigationState()
-        state.select(firstRoute)
-        state.remember(SessionSummary(sessionId: "created-session"))
+        XCTAssertTrue(state.beginNewChatCreation(route))
+        XCTAssertTrue(state.completeNewChatCreation(created, for: route))
+        let oldDestination = state.destination
+        state.clearDestination()
 
-        state.select(secondRoute)
-
-        XCTAssertEqual(state.destination, .newChat(secondRoute))
+        XCTAssertNil(state.destination)
         XCTAssertNil(state.selectedSessionID)
-        XCTAssertTrue(state.isCreatingNewChat)
-    }
+        XCTAssertFalse(state.isCreatingNewChat)
 
-    func testReturningFromContentfulNewChatSuppressesPlaceholdersThenRefreshesSessions() {
-        let route = PendingNewChatRoute()
-        var state = SessionNavigationState()
-        state.select(route)
-        state.remember(SessionSummary(sessionId: "created-session"))
-        let oldDestination = state.destination
-        state.clearDestination()
         var events: [NewChatReturnEvent] = []
-
         SessionListNewChatReturn.run(
             from: oldDestination,
             to: state.destination,
             suppressEmptyPlaceholders: { events.append(.suppressedPlaceholders) },
             refreshSessions: { events.append(.refreshedSessions) }
         )
-
         XCTAssertEqual(events, [.suppressedPlaceholders, .refreshedSessions])
     }
 
-    func testReturningFromEmptyNewChatSuppressesPlaceholderThenRefreshesSessions() {
-        let route = PendingNewChatRoute()
+    func testOrdinarySessionDestinationRemainsUnchanged() {
+        let session = SessionSummary(sessionId: "ordinary-session")
         var state = SessionNavigationState()
-        state.select(route)
-        let oldDestination = state.destination
-        state.clearDestination()
-        var events: [NewChatReturnEvent] = []
 
-        SessionListNewChatReturn.run(
-            from: oldDestination,
-            to: state.destination,
-            suppressEmptyPlaceholders: { events.append(.suppressedPlaceholders) },
-            refreshSessions: { events.append(.refreshedSessions) }
-        )
+        state.select(session)
 
-        XCTAssertEqual(events, [.suppressedPlaceholders, .refreshedSessions])
+        XCTAssertEqual(state.destination, .session(session))
+        XCTAssertEqual(state.selectedSessionID, "ordinary-session")
+        XCTAssertFalse(state.isCreatingNewChat)
     }
 
-    func testReplacingNewChatRouteDoesNotRefreshSessions() {
-        let firstRoute = PendingNewChatRoute()
-        let secondRoute = PendingNewChatRoute()
-        var events: [NewChatReturnEvent] = []
-
-        SessionListNewChatReturn.run(
-            from: .newChat(firstRoute),
-            to: .newChat(secondRoute),
-            suppressEmptyPlaceholders: { events.append(.suppressedPlaceholders) },
-            refreshSessions: { events.append(.refreshedSessions) }
+    func testNewChatDestinationSuppressesBottomShell() {
+        var navigationState = SessionNavigationState()
+        let route = PendingNewChatRoute()
+        XCTAssertTrue(navigationState.beginNewChatCreation(route))
+        XCTAssertTrue(
+            navigationState.completeNewChatCreation(
+                SessionSummary(sessionId: "created-session"),
+                for: route
+            )
         )
 
-        XCTAssertTrue(events.isEmpty)
+        XCTAssertFalse(
+            AppShellChromePolicy.showsBottomBar(
+                isConversationPresented: navigationState.isConversationPresented
+            )
+        )
     }
 
     func testRemovingSelectedSessionClearsDestinationAndRestorationID() {

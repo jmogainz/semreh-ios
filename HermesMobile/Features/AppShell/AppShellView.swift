@@ -75,7 +75,9 @@ struct AppShellView: View {
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if !isSessionConversationPresented {
+                if AppShellChromePolicy.showsBottomBar(
+                    isConversationPresented: isSessionConversationPresented
+                ) {
                     AppShellBottomBar(selection: $selectedSurface)
                 }
             }
@@ -106,9 +108,9 @@ struct AppShellView: View {
                 usesShellChrome: true,
                 shellSurfaceVisitID: sessionSurfaceVisitID,
                 onConversationVisibilityChanged: { isPresented in
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        isSessionConversationPresented = isPresented
-                    }
+                    // This state owns the shell safe area. Keep it synchronous
+                    // while New Chat transfers a focused composer.
+                    isSessionConversationPresented = isPresented
                 }
             )
 
@@ -129,6 +131,12 @@ struct AppShellView: View {
         case .you:
             break
         }
+    }
+}
+
+enum AppShellChromePolicy {
+    static func showsBottomBar(isConversationPresented: Bool) -> Bool {
+        !isConversationPresented
     }
 }
 
