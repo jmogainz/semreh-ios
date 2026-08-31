@@ -358,6 +358,25 @@ final class OpenChatSessionStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testOfficialSidecarDoesNotStartWebUISessionEventStream() async throws {
+        let streamClient = SpySSEStreamingClient()
+        let capabilities = #"{"features":{"session_resources":true,"session_chat":true,"session_chat_streaming":true},"endpoints":{"sessions":{"method":"GET","path":"/api/sessions"},"session_create":{"method":"POST","path":"/api/sessions"},"session":{"method":"GET","path":"/api/sessions/{session_id}"},"session_messages":{"method":"GET","path":"/api/sessions/{session_id}/messages"},"session_chat_stream":{"method":"POST","path":"/api/sessions/{session_id}/chat/stream"}}}"#
+        let viewModel = try makeViewModel(
+            sessionID: "official-session",
+            sessionEventStreamClient: streamClient,
+            usesOfficialContinuity: true,
+            handler: { request in
+                apiTestJSONResponse(capabilities, for: request)
+            }
+        )
+
+        viewModel.startSessionEventSync()
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(streamClient.startedURLs.count, 0)
+    }
+
+    @MainActor
     func testCursorPersistenceIsDebouncedAcrossStreamingBursts() async throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: "goku.session-event-debounce-\(UUID().uuidString)"))
         let server = try XCTUnwrap(URL(string: "https://example.test"))
@@ -1027,6 +1046,7 @@ final class OpenChatSessionStoreTests: XCTestCase {
         activeStreamID: String? = nil,
         streamClient: SSEStreamingClient? = nil,
         sessionEventStreamClient: SSEStreamingClient? = nil,
+        usesOfficialContinuity: Bool = false,
         handler: ((URLRequest) throws -> (HTTPURLResponse, Data))? = nil
     ) throws -> ChatViewModel {
         if let handler {
@@ -1042,7 +1062,18 @@ final class OpenChatSessionStoreTests: XCTestCase {
         configuration.protocolClasses = [MockURLProtocol.self]
         let urlSession = URLSession(configuration: configuration)
         let server = try XCTUnwrap(URL(string: "https://example.test"))
-        let client = APIClient(baseURL: server, session: urlSession)
+        let officialClient = usesOfficialContinuity
+            ? OfficialHermesContinuityClient(
+                baseURL: try XCTUnwrap(URL(string: "https://official.example.test")),
+                session: urlSession,
+                customHeaderProvider: { [] }
+            )
+            : nil
+        let client = APIClient(
+            baseURL: server,
+            session: urlSession,
+            officialContinuityClient: officialClient
+        )
         let resolvedStreamClient = streamClient ?? SpySSEStreamingClient()
         let viewModel = ChatViewModel(
             session: SessionSummary(sessionId: sessionID, activeStreamId: activeStreamID),

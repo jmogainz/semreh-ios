@@ -786,10 +786,17 @@ final class ChatViewModel {
     func startSessionEventSync() {
         guard !didStartSessionEventSync else { return }
         didStartSessionEventSync = true
+
+        // Preserve the mature WebUI lifecycle synchronously. Only a configured
+        // official sidecar needs an asynchronous capability decision.
+        guard client.officialContinuityClient != nil else {
+            sessionEventStreamCoordinator.start()
+            return
+        }
+
         // `/api/sessions/{id}/events` is a community-WebUI journal route, not
         // part of the official continuity surface. Avoid opening it for an
-        // official bearer-selected session; completed-turn reconciliation is
-        // driven by the official chat stream and GET messages instead.
+        // official session; completed-turn reconciliation uses GET messages.
         Task { @MainActor [weak self] in
             guard let self else { return }
             guard await client.continuityTransport() == .webUI else {
