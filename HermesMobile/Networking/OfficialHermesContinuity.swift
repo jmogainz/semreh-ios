@@ -166,6 +166,7 @@ final class OfficialHermesContinuityClient: @unchecked Sendable {
   private let encoder = JSONEncoder()
   private let lock = NSLock()
   private var capability: Bool?
+  private var capabilityProbeTask: Task<Bool, Never>?
   private var requests: [String: URLRequest] = [:]
   private var streamTasks: [String: Task<Void, Never>] = [:]
   init(
@@ -190,18 +191,36 @@ final class OfficialHermesContinuityClient: @unchecked Sendable {
       lock.unlock()
       return capability
     }
-    lock.unlock()
-    do {
-      let c: OfficialHermesCapabilities = try await send(.officialCapabilities, method: "GET")
-      lock.lock()
-      capability = c.supportsSessionContinuity
+    if let capabilityProbeTask {
       lock.unlock()
-    } catch {
-      lock.lock()
-      capability = false
-      lock.unlock()
+      return await capabilityProbeTask.value
     }
-    return capability == true
+    let probeTask = Task { [weak self] () -> Bool in
+      // Let the creator publish the task before the probe can complete. This
+      // keeps simultaneous callers on one in-flight capability request.
+      await Task.yield()
+      guard let self else { return false }
+      do {
+        let c: OfficialHermesCapabilities = try await self.send(.officialCapabilities, method: "GET")
+        let supported = c.supportsSessionContinuity
+        self.lock.lock()
+        self.capability = supported
+        self.capabilityProbeTask = nil
+        self.lock.unlock()
+        return supported
+      } catch {
+        // A transport/decoding failure is transient; leave the cache empty so
+        // fallback callers can retry later. A valid unsupported response above
+        // remains cached as false.
+        self.lock.lock()
+        self.capabilityProbeTask = nil
+        self.lock.unlock()
+        return false
+      }
+    }
+    capabilityProbeTask = probeTask
+    lock.unlock()
+    return await probeTask.value
   }
   func probeSessionContinuity() async throws {
     let health: HealthResponse = try await send(.health, method: "GET")
@@ -516,7 +535,14 @@ final class OfficialHermesStreamClient: SSEStreamingClient {
         .first(where: { $0.name == "stream_id" })?.value,
       id.hasPrefix("official_")
     else {
-      fallback.start(url: url, resumeFrom: eventID, onEvent: onEvent)
+      fallback.start(url: url, resumeFrom: eventID) { [weak self] event, fallbackEventID in
+        if let fallbackEventID {
+          self?.lastEventID = fallbackEventID
+        } else if let fallbackEventID = self?.fallback.lastEventID {
+          self?.lastEventID = fallbackEventID
+        }
+        onEvent(event)
+      }
       return
     }
     task = Task { [weak self] in

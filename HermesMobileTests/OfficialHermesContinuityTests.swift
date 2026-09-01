@@ -118,6 +118,51 @@ final class OfficialHermesContinuityTests: APIClientTestCase {
     XCTAssertEqual(result.session?.sessionId, "canonical-α")
   }
 
+  func testTransientOfficialCapabilityFailureCanRecoverOnRetry() async {
+    let session = makeSession()
+    let sidecar = OfficialHermesContinuityClient(
+      baseURL: URL(string: "https://official.test")!, session: session, customHeaderProvider: { [] }
+    )
+    var capabilityRequests = 0
+    MockURLProtocol.requestHandler = { request in
+      guard request.url?.path == "/v1/capabilities" else {
+        return self.response(#"{}"#, request)
+      }
+      capabilityRequests += 1
+      if capabilityRequests == 1 {
+        throw URLError(.timedOut)
+      }
+      return self.response(self.capabilities, request)
+    }
+
+    let firstResult = await sidecar.isCapabilityValid()
+    let secondResult = await sidecar.isCapabilityValid()
+    XCTAssertFalse(firstResult)
+    XCTAssertTrue(secondResult)
+    XCTAssertEqual(capabilityRequests, 2)
+  }
+
+  func testSuccessfulUnsupportedCapabilityResponseIsCached() async {
+    let session = makeSession()
+    let sidecar = OfficialHermesContinuityClient(
+      baseURL: URL(string: "https://official.test")!, session: session, customHeaderProvider: { [] }
+    )
+    var capabilityRequests = 0
+    MockURLProtocol.requestHandler = { request in
+      capabilityRequests += 1
+      return self.response(
+        #"{"features":{},"endpoints":{}}"#,
+        request
+      )
+    }
+
+    let firstResult = await sidecar.isCapabilityValid()
+    let secondResult = await sidecar.isCapabilityValid()
+    XCTAssertFalse(firstResult)
+    XCTAssertFalse(secondResult)
+    XCTAssertEqual(capabilityRequests, 1)
+  }
+
   func testOfficialSessionPagingUsesBoundedOffsetContractAndReturnsOlderCursor() async throws {
     let session = makeSession()
     let sidecar = OfficialHermesContinuityClient(

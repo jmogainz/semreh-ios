@@ -57,6 +57,8 @@ private struct PendingSessionDeletion {
     let sessionsBeforeDeletion: [SessionSummary]
     let archivedCountBeforeDeletion: Int?
     let successfulLoadGenerationAtStart: Int
+    var latestCanonicalSessions: [SessionSummary]?
+    var latestCanonicalArchivedCount: Int?
 }
 
 private struct SessionMutationRejectedError: LocalizedError {
@@ -262,6 +264,10 @@ final class SessionListViewModel {
             guard loadGeneration == generation else { return false }
             let canonicalVisibleSessions = (response.sessions ?? [])
                 .filter { $0.archived != true && $0.shouldAppearInSessionList }
+            for sessionID in pendingSessionDeletions.keys {
+                pendingSessionDeletions[sessionID]?.latestCanonicalSessions = canonicalVisibleSessions
+                pendingSessionDeletions[sessionID]?.latestCanonicalArchivedCount = response.archivedCount
+            }
             let visibleSessions = sessionsAfterOptimisticDeletions(canonicalVisibleSessions)
             successfulLoadGeneration = generation
             applySessions(visibleSessions, archivedCount: response.archivedCount, animation: animation)
@@ -619,7 +625,9 @@ final class SessionListViewModel {
         let pendingDeletion = PendingSessionDeletion(
             sessionsBeforeDeletion: sessions,
             archivedCountBeforeDeletion: archivedCount,
-            successfulLoadGenerationAtStart: successfulLoadGeneration
+            successfulLoadGenerationAtStart: successfulLoadGeneration,
+            latestCanonicalSessions: nil,
+            latestCanonicalArchivedCount: nil
         )
         pendingSessionDeletions[sessionId] = pendingDeletion
 
@@ -1202,23 +1210,34 @@ final class SessionListViewModel {
         guard let pendingDeletion = pendingSessionDeletions.removeValue(forKey: sessionID) else { return }
         confirmedSessionDeletionIDs.remove(sessionID)
 
-        // A newer successful canonical list is authoritative; do not resurrect a
-        // row from an old pre-delete snapshot after it has been independently
-        // removed or changed on the server.
-        guard successfulLoadGeneration <= pendingDeletion.successfulLoadGenerationAtStart else { return }
+        // Prefer the newest canonical response observed while the delete was
+        // pending. It may contain a changed version of the row, and is the only
+        // safe source after a refresh advanced successfulLoadGeneration.
+        let canonicalSessions: [SessionSummary]
+        let canonicalArchivedCount: Int?
+        if let latestCanonicalSessions = pendingDeletion.latestCanonicalSessions {
+            canonicalSessions = latestCanonicalSessions
+            canonicalArchivedCount = pendingDeletion.latestCanonicalArchivedCount
+        } else {
+            // No refresh overlapped the mutation, so the exact pre-delete
+            // snapshot is still the correct rollback source.
+            guard successfulLoadGeneration <= pendingDeletion.successfulLoadGenerationAtStart else { return }
+            canonicalSessions = pendingDeletion.sessionsBeforeDeletion
+            canonicalArchivedCount = pendingDeletion.archivedCountBeforeDeletion
+        }
 
         let hiddenSessionIDs = Set(pendingSessionDeletions.keys).union(confirmedSessionDeletionIDs)
-        let restoredSessions = pendingDeletion.sessionsBeforeDeletion.filter { session in
+        let restoredSessions = canonicalSessions.filter { session in
             guard let candidateID = Self.nonEmpty(session.sessionId) else { return true }
             return !hiddenSessionIDs.contains(candidateID)
         }
         applySessions(
             restoredSessions,
-            archivedCount: pendingDeletion.archivedCountBeforeDeletion,
+            archivedCount: canonicalArchivedCount,
             animation: animation
         )
 
-        guard let restoredSession = pendingDeletion.sessionsBeforeDeletion.first(where: {
+        guard let restoredSession = canonicalSessions.first(where: {
             Self.nonEmpty($0.sessionId) == sessionID
         }), let modelContext else { return }
         do {

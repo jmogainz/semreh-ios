@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 final class SessionListMutationTests: XCTestCase {
     override func tearDown() {
         MockURLProtocol.requestHandler = nil
+        OverlappingDeleteURLProtocol.reset()
         super.tearDown()
     }
 
@@ -934,6 +935,39 @@ final class SessionListMutationTests: XCTestCase {
         XCTAssertEqual(viewModel.sessions, before)
         XCTAssertEqual(viewModel.actionErrorMessage, "delete refused")
         XCTAssertFalse(viewModel.isMutating(session))
+    }
+
+    @MainActor
+    func testDeleteFailureAfterOverlappingCanonicalRefreshRestoresLatestCanonicalRow() async throws {
+        let mutationStarted = expectation(description: "delete request started")
+        let overlappingLoadStarted = expectation(description: "overlapping canonical load started")
+        OverlappingDeleteURLProtocol.configure(
+            onMutationStarted: { mutationStarted.fulfill() },
+            onOverlappingLoadStarted: { overlappingLoadStarted.fulfill() }
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OverlappingDeleteURLProtocol.self]
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let client = APIClient(baseURL: server, session: URLSession(configuration: configuration))
+        let viewModel = SessionListViewModel(server: server, client: client)
+
+        await viewModel.load()
+        let session = try XCTUnwrap(viewModel.sessions.first(where: { $0.sessionId == "delete-me" }))
+        let deleteTask = Task { @MainActor in await viewModel.delete(session) }
+        await fulfillment(of: [mutationStarted], timeout: 2)
+
+        let overlappingLoadTask = Task { @MainActor in await viewModel.load() }
+        await fulfillment(of: [overlappingLoadStarted], timeout: 2)
+        XCTAssertNil(viewModel.sessions.first(where: { $0.sessionId == "delete-me" }))
+        let overlappingLoadSucceeded = await overlappingLoadTask.value
+        XCTAssertTrue(overlappingLoadSucceeded)
+
+        let deleteSucceeded = await deleteTask.value
+        XCTAssertFalse(deleteSucceeded)
+        XCTAssertEqual(
+            viewModel.sessions.first(where: { $0.sessionId == "delete-me" })?.title,
+            "Canonical latest"
+        )
     }
 
     @MainActor
@@ -3125,6 +3159,86 @@ private final class OutOfOrderSessionURLProtocol: URLProtocol {
             )!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        }
+    }
+
+    override func stopLoading() {
+        loadingTask?.cancel()
+    }
+}
+
+private final class OverlappingDeleteURLProtocol: URLProtocol {
+    private static let lock = NSLock()
+    private static var sessionLoadCount = 0
+    private static var onMutationStarted: (() -> Void)?
+    private static var onOverlappingLoadStarted: (() -> Void)?
+    private var loadingTask: Task<Void, Never>?
+
+    static func configure(
+        onMutationStarted: @escaping () -> Void,
+        onOverlappingLoadStarted: @escaping () -> Void
+    ) {
+        lock.lock()
+        sessionLoadCount = 0
+        self.onMutationStarted = onMutationStarted
+        self.onOverlappingLoadStarted = onOverlappingLoadStarted
+        lock.unlock()
+    }
+
+    static func reset() {
+        lock.lock()
+        sessionLoadCount = 0
+        onMutationStarted = nil
+        onOverlappingLoadStarted = nil
+        lock.unlock()
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url else { return }
+        let path = url.path
+        let responseBody: String
+        let delayNanoseconds: UInt64
+
+        Self.lock.lock()
+        switch path {
+        case "/api/sessions":
+            Self.sessionLoadCount += 1
+            if Self.sessionLoadCount == 1 {
+                responseBody = #"{"sessions":[{"session_id":"delete-me","title":"Before delete","archived":false},{"session_id":"keep-me","title":"Keep me","archived":false}]}"#
+            } else {
+                Self.onOverlappingLoadStarted?()
+                responseBody = #"{"sessions":[{"session_id":"delete-me","title":"Canonical latest","archived":false},{"session_id":"keep-me","title":"Keep me","archived":false}]}"#
+            }
+            delayNanoseconds = 0
+        case "/api/session/delete":
+            Self.onMutationStarted?()
+            responseBody = #"{"ok":false,"error":"delete refused"}"#
+            delayNanoseconds = 100_000_000
+        default:
+            responseBody = #"{}"#
+            delayNanoseconds = 0
+        }
+        Self.lock.unlock()
+
+        loadingTask = Task { [weak self] in
+            guard let self else { return }
+            if delayNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: delayNanoseconds)
+            }
+            guard !Task.isCancelled else { return }
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data(responseBody.utf8))
             client?.urlProtocolDidFinishLoading(self)
         }
     }
