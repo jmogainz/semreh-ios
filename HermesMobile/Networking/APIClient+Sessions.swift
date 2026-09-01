@@ -40,7 +40,8 @@ extension APIClient {
             return try await officialSessionResponse(
                 id: id,
                 includeMessages: includeMessages,
-                messageLimit: messageLimit
+                messageLimit: messageLimit,
+                messageBefore: messageBefore
             )
         }
         return try await send(

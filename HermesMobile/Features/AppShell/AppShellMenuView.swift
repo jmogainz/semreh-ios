@@ -5,11 +5,13 @@ import SwiftData
 struct ControlView: View {
     @Bindable var authManager: AuthManager
     let server: URL
+    let isActive: Bool
+    let onNestedDestinationVisibilityChanged: (Bool) -> Void
 
     @Environment(\.modelContext) private var modelContext
 
     @State private var viewModel: SessionListViewModel
-    @State private var selectedDestination: SessionListUtilityDestination?
+    @State private var navigationState = ControlNavigationState()
     @State private var profilesAreExpanded = SessionSidebarDisclosureSettings.defaultProfilesAreExpanded
     @State private var projectsAreExpanded = SessionSidebarDisclosureSettings.defaultProjectsAreExpanded
     @State private var selectedProjectID: String?
@@ -42,9 +44,16 @@ struct ControlView: View {
     @AppStorage private var showsCliSessions: Bool
     @AppStorage private var showsClaudeCodeSessions: Bool
 
-    init(authManager: AuthManager, server: URL) {
+    init(
+        authManager: AuthManager,
+        server: URL,
+        isActive: Bool = true,
+        onNestedDestinationVisibilityChanged: @escaping (Bool) -> Void = { _ in }
+    ) {
         self.authManager = authManager
         self.server = server
+        self.isActive = isActive
+        self.onNestedDestinationVisibilityChanged = onNestedDestinationVisibilityChanged
         _viewModel = State(initialValue: SessionListViewModel(server: server))
         _showsCliSessions = AppStorage(
             wrappedValue: SessionRowDisplaySettings.showsCliSessions(for: server),
@@ -70,7 +79,7 @@ struct ControlView: View {
                     projectPendingDeletion: $projectPendingDeletion,
                     projectPendingRename: $projectPendingRename,
                     openDestination: { destination in
-                        selectedDestination = destination
+                        navigationState.select(destination)
                     },
                     switchActiveProfile: { profile in
                         Task {
@@ -87,7 +96,7 @@ struct ControlView: View {
 
                 Section("Session history") {
                     Button {
-                        selectedDestination = .archived
+                        navigationState.select(.archived)
                     } label: {
                         Label("Archived Sessions", systemImage: "archivebox")
                     }
@@ -95,13 +104,13 @@ struct ControlView: View {
 
                 Section("Connection") {
                     Button {
-                        selectedDestination = .settings(nil)
+                        navigationState.select(.settings(nil))
                     } label: {
                         Label("Settings", systemImage: "gearshape")
                     }
 
                     Button {
-                        selectedDestination = .settings(.servers)
+                        navigationState.select(.settings(.servers))
                     } label: {
                         Label("Manage Servers", systemImage: "server.rack")
                     }
@@ -111,13 +120,24 @@ struct ControlView: View {
             .contentMargins(.top, 108, for: .scrollContent)
             .scrollContentBackground(.hidden)
             .background(SemrehBackdrop().ignoresSafeArea())
-            .navigationDestination(item: $selectedDestination) { destination in
+            .navigationDestination(item: $navigationState.destination) { destination in
                 utilityDestination(destination)
             }
             .task {
                 profilesAreExpanded = persistedProfilesAreExpanded
                 projectsAreExpanded = persistedProjectsAreExpanded
                 await loadSidebarData()
+            }
+            .onAppear {
+                onNestedDestinationVisibilityChanged(navigationState.isNestedDestinationPresented)
+            }
+            .onChange(of: navigationState.destination) { _, destination in
+                onNestedDestinationVisibilityChanged(destination != nil)
+            }
+            .onChange(of: isActive) { _, active in
+                guard !active else { return }
+                navigationState.resetForSurfaceDeactivation()
+                onNestedDestinationVisibilityChanged(false)
             }
         }
         .sheet(isPresented: $isPresentingProjectCreation) {

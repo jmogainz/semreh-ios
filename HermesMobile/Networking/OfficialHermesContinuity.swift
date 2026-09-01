@@ -83,7 +83,16 @@ private struct OfficialMessage: Decodable {
       toolCalls: toolCalls, reasoning: reasoning ?? reasoningContent)
   }
 }
-private struct OfficialMessages: Decodable { let data: [OfficialMessage]? }
+private struct OfficialMessagePagination: Decodable {
+  let limit: Int?
+  let offset: Int?
+  let order: String?
+  let returned: Int?
+}
+private struct OfficialMessages: Decodable {
+  let data: [OfficialMessage]?
+  let pagination: OfficialMessagePagination?
+}
 private struct OfficialCreateBody: Encodable { let model: String? }
 private struct OfficialChatBody: Encodable {
   let input: String
@@ -92,7 +101,12 @@ private struct OfficialChatBody: Encodable {
 }
 
 extension SessionDetail {
-  fileprivate init(official s: OfficialSessionDTO, messages: [ChatMessage]?) {
+  fileprivate init(
+    official s: OfficialSessionDTO,
+    messages: [ChatMessage]?,
+    messagesTruncated: Bool? = nil,
+    messagesOffset: Int? = nil
+  ) {
     sessionId = s.id
     title = s.title
     workspace = nil
@@ -129,8 +143,8 @@ extension SessionDetail {
     isReadOnly = nil
     self.messages = messages
     toolCalls = nil
-    messagesTruncated = nil
-    messagesOffset = nil
+    self.messagesTruncated = messagesTruncated
+    self.messagesOffset = messagesOffset
     compressionAnchorVisibleIdx = nil
     compressionAnchorMessageKey = nil
     compressionAnchorSummary = nil
@@ -143,6 +157,8 @@ struct OfficialStreamFrame {
 }
 /// The official transport has its own URLSession, auth provider, capability state, and stream registry.
 final class OfficialHermesContinuityClient: @unchecked Sendable {
+  private static let defaultMessageLimit = 50
+  private static let maximumMessageLimit = 500
   nonisolated let baseURL: URL
   private let session: URLSession
   private let headers: @Sendable () -> [CustomHeader]
@@ -202,16 +218,55 @@ final class OfficialHermesContinuityClient: @unchecked Sendable {
       sessions: r.data?.map { SessionSummary(from: SessionDetail(official: $0, messages: nil)) },
       cliCount: nil, archivedCount: nil, serverTime: nil, serverTz: nil)
   }
-  func session(id: String, includeMessages: Bool, limit: Int?) async throws -> SessionResponse {
+  func session(
+    id: String,
+    includeMessages: Bool,
+    limit: Int?,
+    messageBefore: Int? = nil
+  ) async throws -> SessionResponse {
     let e: OfficialSessionEnvelope = try await send(.officialSession(id: id), method: "GET")
     guard let s = e.session else { throw OfficialHermesContinuityError.missingPayload }
     var m: [ChatMessage]?
+    var messagesTruncated: Bool?
+    var messagesOffset: Int?
     if includeMessages {
+      // The official endpoint defaults to a 500-message page when `limit` is
+      // omitted. Always send a bounded page, including when callers pass nil.
+      let boundedLimit = min(
+        max(1, limit ?? Self.defaultMessageLimit), Self.maximumMessageLimit)
+      let requestedOffset: Int?
+      let order: String
+      if let messageBefore {
+        requestedOffset = max(0, messageBefore - boundedLimit)
+        order = "oldest"
+      } else {
+        requestedOffset = nil
+        order = "latest"
+      }
       let r: OfficialMessages = try await send(
-        .officialSessionMessages(id: id, limit: limit), method: "GET")
+        .officialSessionMessages(
+          id: id, limit: boundedLimit, offset: requestedOffset, order: order), method: "GET")
       m = r.data?.map(\.domain)
+      let returned = r.pagination?.returned ?? m?.count ?? 0
+      let resolvedOffset: Int?
+      if messageBefore != nil {
+        resolvedOffset = r.pagination?.offset ?? requestedOffset
+      } else if let messageCount = s.messageCount {
+        resolvedOffset = max(0, messageCount - returned)
+      } else {
+        resolvedOffset = r.pagination?.offset
+      }
+      messagesOffset = resolvedOffset
+      messagesTruncated = resolvedOffset.map { $0 > 0 }
     }
-    return SessionResponse(session: SessionDetail(official: s, messages: m))
+    return SessionResponse(
+      session: SessionDetail(
+        official: s,
+        messages: m,
+        messagesTruncated: messagesTruncated,
+        messagesOffset: messagesOffset
+      )
+    )
   }
   func createSession(model: String?) async throws -> SessionResponse {
     let e: OfficialSessionEnvelope = try await send(
@@ -364,11 +419,20 @@ extension APIClient {
   func validateChatAttachments(_ attachments: [JSONValue]?) async throws {
     try await officialContinuityClient?.validate(attachments: attachments)
   }
-  func officialSessionResponse(id: String, includeMessages: Bool, messageLimit: Int?) async throws
+  func officialSessionResponse(
+    id: String,
+    includeMessages: Bool,
+    messageLimit: Int?,
+    messageBefore: Int? = nil
+  ) async throws
     -> SessionResponse
   {
     try await officialContinuityClient!.session(
-      id: id, includeMessages: includeMessages, limit: messageLimit)
+      id: id,
+      includeMessages: includeMessages,
+      limit: messageLimit,
+      messageBefore: messageBefore
+    )
   }
   func officialSessionsResponse() async throws -> SessionsResponse {
     try await officialContinuityClient!.sessions()

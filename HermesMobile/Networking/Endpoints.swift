@@ -4,7 +4,7 @@ enum Endpoint {
     case officialCapabilities
     case officialSessions
     case officialSession(id: String)
-    case officialSessionMessages(id: String, limit: Int?)
+    case officialSessionMessages(id: String, limit: Int?, offset: Int?, order: String?)
     case officialCreateSession
     case officialSessionChatStream(id: String)
     case health
@@ -138,7 +138,7 @@ enum Endpoint {
             return "/v1/capabilities"
         case .officialSessions, .officialCreateSession:
             return "/api/sessions"
-        case let .officialSession(id), let .officialSessionMessages(id, _), let .officialSessionChatStream(id):
+        case let .officialSession(id), let .officialSessionMessages(id, _, _, _), let .officialSessionChatStream(id):
             let encodedID = id.addingPercentEncoding(withAllowedCharacters: Self.pathSegmentAllowed) ?? id
             switch self {
             case .officialSession:
@@ -401,12 +401,18 @@ enum Endpoint {
 
     var queryItems: [URLQueryItem] {
         switch self {
-        case let .officialSessionMessages(_, limit):
-            guard let limit else { return [] }
-            return [
-                URLQueryItem(name: "limit", value: "\(max(0, limit))"),
-                URLQueryItem(name: "order", value: "latest")
-            ]
+        case let .officialSessionMessages(_, limit, offset, order):
+            var items: [URLQueryItem] = []
+            if let limit {
+                items.append(URLQueryItem(name: "limit", value: "\(max(0, limit))"))
+            }
+            if let offset {
+                items.append(URLQueryItem(name: "offset", value: "\(max(0, offset))"))
+            }
+            if let order {
+                items.append(URLQueryItem(name: "order", value: order))
+            }
+            return items
         case .officialCapabilities, .officialSessions, .officialSession, .officialCreateSession, .officialSessionChatStream:
             return []
         case let .sessions(includeArchived, archivedLimit):
@@ -566,7 +572,7 @@ enum Endpoint {
         switch self {
         case let .officialSession(id):
             url = officialSessionURL(relativeTo: baseURL, id: id)
-        case let .officialSessionMessages(id, _):
+        case let .officialSessionMessages(id, _, _, _):
             url = officialSessionURL(relativeTo: baseURL, id: id, suffix: "/messages")
         case let .officialSessionChatStream(id):
             url = officialSessionURL(relativeTo: baseURL, id: id, suffix: "/chat/stream")

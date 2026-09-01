@@ -118,6 +118,92 @@ final class OfficialHermesContinuityTests: APIClientTestCase {
     XCTAssertEqual(result.session?.sessionId, "canonical-α")
   }
 
+  func testOfficialSessionPagingUsesBoundedOffsetContractAndReturnsOlderCursor() async throws {
+    let session = makeSession()
+    let sidecar = OfficialHermesContinuityClient(
+      baseURL: URL(string: "https://official.test")!, session: session, customHeaderProvider: { [] }
+    )
+    var messageRequest: URLRequest?
+    MockURLProtocol.requestHandler = { request in
+      if request.url?.path == "/v1/capabilities" {
+        return self.response(self.capabilities, request)
+      }
+      if request.url?.path == "/api/sessions/s1" {
+        return self.response(#"{"session":{"id":"s1","message_count":175}}"#, request)
+      }
+      if request.url?.path == "/api/sessions/s1/messages" {
+        messageRequest = request
+        return self.response(
+          #"{"object":"list","session_id":"s1","data":[{"id":"older","role":"user","content":"Older"}],"pagination":{"limit":50,"offset":100,"order":"oldest","returned":1}}"#,
+          request
+        )
+      }
+      XCTFail("unexpected official request: \(request.url?.absoluteString ?? "nil")")
+      return self.response(#"{}"#, request)
+    }
+
+    let client = APIClient(
+      baseURL: URL(string: "https://webui.test")!, session: session,
+      officialContinuityClient: sidecar)
+    let result = try await client.session(
+      id: "s1",
+      includeMessages: true,
+      messageLimit: 50,
+      messageBefore: 150
+    )
+
+    let query = Dictionary(
+      uniqueKeysWithValues: (URLComponents(url: try XCTUnwrap(messageRequest?.url), resolvingAgainstBaseURL: false)?.queryItems ?? [])
+        .map { ($0.name, $0.value) }
+    )
+    XCTAssertEqual(query["limit"], "50")
+    XCTAssertEqual(query["offset"], "100")
+    XCTAssertEqual(query["order"], "oldest")
+    XCTAssertEqual(result.session?.messages?.first?.id, "older")
+    XCTAssertEqual(result.session?.messagesOffset, 100)
+    XCTAssertTrue(result.session?.messagesTruncated == true)
+  }
+
+  func testOfficialInitialSessionLoadRemainsBoundedAndDerivesOlderCursor() async throws {
+    let session = makeSession()
+    let sidecar = OfficialHermesContinuityClient(
+      baseURL: URL(string: "https://official.test")!, session: session, customHeaderProvider: { [] }
+    )
+    var messageRequest: URLRequest?
+    MockURLProtocol.requestHandler = { request in
+      if request.url?.path == "/v1/capabilities" {
+        return self.response(self.capabilities, request)
+      }
+      if request.url?.path == "/api/sessions/s1" {
+        return self.response(#"{"session":{"id":"s1","message_count":175}}"#, request)
+      }
+      if request.url?.path == "/api/sessions/s1/messages" {
+        messageRequest = request
+        return self.response(
+          #"{"object":"list","session_id":"s1","data":[{"id":"latest","role":"assistant","content":"Latest"}],"pagination":{"limit":50,"offset":0,"order":"latest","returned":50}}"#,
+          request
+        )
+      }
+      XCTFail("unexpected official request: \(request.url?.absoluteString ?? "nil")")
+      return self.response(#"{}"#, request)
+    }
+
+    let client = APIClient(
+      baseURL: URL(string: "https://webui.test")!, session: session,
+      officialContinuityClient: sidecar)
+    let result = try await client.session(id: "s1", includeMessages: true, messageLimit: nil)
+
+    let query = Dictionary(
+      uniqueKeysWithValues: (URLComponents(url: try XCTUnwrap(messageRequest?.url), resolvingAgainstBaseURL: false)?.queryItems ?? [])
+        .map { ($0.name, $0.value) }
+    )
+    XCTAssertEqual(query["limit"], "50")
+    XCTAssertEqual(query["order"], "latest")
+    XCTAssertNil(query["offset"])
+    XCTAssertEqual(result.session?.messagesOffset, 125)
+    XCTAssertTrue(result.session?.messagesTruncated == true)
+  }
+
   func testOfficialMapperKeepsTerminalLifecycleEventsDistinct() {
     XCTAssertEqual(
       OfficialHermesSSEEventMapper.map(eventType: "assistant.delta", data: #"{"delta":"hello"}"#),

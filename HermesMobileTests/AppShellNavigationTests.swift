@@ -21,6 +21,46 @@ final class AppShellNavigationTests: XCTestCase {
         XCTAssertNotEqual(AppShellSurface.control.title, "Control Center")
     }
 
+    func testNestedControlDestinationHidesBothShellBarsAndResetsOnReentry() {
+        var navigationState = ControlNavigationState()
+
+        XCTAssertFalse(navigationState.isNestedDestinationPresented)
+        XCTAssertTrue(
+            AppShellChromePolicy.showsTopBar(
+                surface: .control,
+                isSessionConversationPresented: false,
+                isControlDestinationPresented: false
+            )
+        )
+        XCTAssertTrue(
+            AppShellChromePolicy.showsBottomBar(
+                isConversationPresented: false,
+                isControlDestinationPresented: false
+            )
+        )
+
+        navigationState.select(.tasks)
+
+        XCTAssertTrue(navigationState.isNestedDestinationPresented)
+        XCTAssertFalse(
+            AppShellChromePolicy.showsTopBar(
+                surface: .control,
+                isSessionConversationPresented: false,
+                isControlDestinationPresented: true
+            )
+        )
+        XCTAssertFalse(
+            AppShellChromePolicy.showsBottomBar(
+                isConversationPresented: false,
+                isControlDestinationPresented: true
+            )
+        )
+
+        navigationState.resetForSurfaceDeactivation()
+
+        XCTAssertFalse(navigationState.isNestedDestinationPresented)
+    }
+
     func testSessionNavigationStateMarksOnlyConversationDestinationsAsConversation() {
         var state = SessionNavigationState()
         XCTAssertFalse(state.isConversationPresented)

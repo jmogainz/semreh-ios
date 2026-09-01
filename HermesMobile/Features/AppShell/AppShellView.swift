@@ -50,12 +50,18 @@ struct AppShellView: View {
     @Binding var pendingNewChatRequest: NewChatRequest?
 
     @State private var isSessionConversationPresented = false
+    @State private var isControlDestinationPresented = false
+    @State private var controlSurfaceVisitID = 0
     @State private var sessionSurfaceVisitID = 0
 
     var body: some View {
         surfaceContent
             .safeAreaInset(edge: .top, spacing: 0) {
-                if !isSessionConversationPresented && selectedSurface != .you {
+                if AppShellChromePolicy.showsTopBar(
+                    surface: selectedSurface,
+                    isSessionConversationPresented: isSessionConversationPresented,
+                    isControlDestinationPresented: isControlDestinationPresented
+                ) {
                     AppShellTopBar(
                         surface: selectedSurface,
                         onPrimaryAction: handlePrimaryAction
@@ -64,14 +70,19 @@ struct AppShellView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if AppShellChromePolicy.showsBottomBar(
-                    isConversationPresented: isSessionConversationPresented
+                    isConversationPresented: isSessionConversationPresented,
+                    isControlDestinationPresented: isControlDestinationPresented
                 ) {
                     AppShellBottomBar(selection: $selectedSurface)
                 }
             }
             .onChange(of: selectedSurface) { oldValue, newValue in
-                guard oldValue != newValue, newValue == .sessions else { return }
-                sessionSurfaceVisitID += 1
+                guard oldValue != newValue else { return }
+                isControlDestinationPresented = false
+                controlSurfaceVisitID += 1
+                if newValue == .sessions {
+                    sessionSurfaceVisitID += 1
+                }
             }
     }
 
@@ -95,7 +106,15 @@ struct AppShellView: View {
             )
 
         case .control:
-            ControlView(authManager: authManager, server: server)
+            ControlView(
+                authManager: authManager,
+                server: server,
+                isActive: selectedSurface == .control,
+                onNestedDestinationVisibilityChanged: { isPresented in
+                    isControlDestinationPresented = isPresented
+                }
+            )
+            .id(controlSurfaceVisitID)
 
         case .you:
             YouView(authManager: authManager, server: server)
@@ -113,8 +132,41 @@ struct AppShellView: View {
 }
 
 enum AppShellChromePolicy {
+    static func showsTopBar(
+        surface: AppShellSurface,
+        isSessionConversationPresented: Bool,
+        isControlDestinationPresented: Bool
+    ) -> Bool {
+        surface != .you
+            && !isSessionConversationPresented
+            && !(surface == .control && isControlDestinationPresented)
+    }
+
+    static func showsBottomBar(
+        isConversationPresented: Bool,
+        isControlDestinationPresented: Bool
+    ) -> Bool {
+        !isConversationPresented && !isControlDestinationPresented
+    }
+
     static func showsBottomBar(isConversationPresented: Bool) -> Bool {
         !isConversationPresented
+    }
+}
+
+struct ControlNavigationState: Equatable {
+    var destination: SessionListUtilityDestination?
+
+    var isNestedDestinationPresented: Bool {
+        destination != nil
+    }
+
+    mutating func select(_ destination: SessionListUtilityDestination) {
+        self.destination = destination
+    }
+
+    mutating func resetForSurfaceDeactivation() {
+        destination = nil
     }
 }
 
