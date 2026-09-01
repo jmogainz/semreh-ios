@@ -37,6 +37,7 @@ protocol ChatStreamCoordinatorDelegate: AnyObject {
     var streamCoordinatorDisplayTitle: String { get }
     var streamCoordinatorHasRunningLiveToolCall: Bool { get }
     var streamCoordinatorHasPendingPrompt: Bool { get }
+    var streamCoordinatorHasNativeAuthLocalInputPrompt: Bool { get }
     var streamCoordinatorLatestServerLoadHadAssistantResponseAfterLatestUser: Bool { get }
     var streamCoordinatorStreamingAssistantMessageID: String? { get set }
 
@@ -74,8 +75,17 @@ protocol ChatStreamCoordinatorDelegate: AnyObject {
     func streamCoordinatorApplyDone(_ payload: DoneStreamEvent) -> Bool
     func streamCoordinatorApplyApprovalUpdate(_ update: ApprovalPendingResponse)
     func streamCoordinatorApplyClarificationUpdate(_ update: ClarificationPendingResponse)
+    func streamCoordinatorApplyNativeAuthComponent(_ component: NativeAuthWireComponent)
+    func streamCoordinatorApplyNativeAuthState(_ state: NativeAuthWireState)
+    func streamCoordinatorApplyWebsiteLogin(_ request: WebsiteLoginRequest)
     @discardableResult
     func streamCoordinatorEnqueuePendingSteerLeftover(_ text: String) -> Bool
+}
+
+extension ChatStreamCoordinatorDelegate {
+    var streamCoordinatorHasNativeAuthLocalInputPrompt: Bool { false }
+    func streamCoordinatorApplyNativeAuthComponent(_ component: NativeAuthWireComponent) {}
+    func streamCoordinatorApplyNativeAuthState(_ state: NativeAuthWireState) {}
 }
 
 @MainActor
@@ -667,6 +677,15 @@ final class ChatStreamCoordinator {
             liveActivityManager.update(.waitingForClarification)
             delegate?.streamCoordinatorApplyClarificationUpdate(update)
             markProgress()
+        case .websiteLoginPending(let request):
+            delegate?.streamCoordinatorApplyWebsiteLogin(request)
+            markProgress()
+        case .nativeComponent(let component):
+            delegate?.streamCoordinatorApplyNativeAuthComponent(component)
+            markProgress()
+        case .nativeComponentState(let state):
+            delegate?.streamCoordinatorApplyNativeAuthState(state)
+            markProgress()
         case .pendingSteerLeftover(let text):
             if delegate?.streamCoordinatorEnqueuePendingSteerLeftover(text) == true {
                 markProgress()
@@ -834,7 +853,9 @@ final class ChatStreamCoordinator {
         runGeneration &+= 1
         liveActivityManager.end(status: .complete, activity: String(localized: "Response complete"), errorSummary: nil)
         delegate?.streamCoordinatorRemoveSnapshot(streamID: activeStreamID)
-        delegate?.streamCoordinatorStopAuxiliaryMonitoring(clearPrompt: true)
+        delegate?.streamCoordinatorStopAuxiliaryMonitoring(
+            clearPrompt: delegate?.streamCoordinatorHasNativeAuthLocalInputPrompt != true
+        )
         activeStreamID = nil
         lastEventID = nil
         liveTokensPerSecond = nil
@@ -886,7 +907,9 @@ final class ChatStreamCoordinator {
         let completedNormally = hasCompletedCurrentResponse
         let finishedStreamID = activeStreamID
         streamClient.stop()
-        delegate?.streamCoordinatorStopAuxiliaryMonitoring(clearPrompt: true)
+        delegate?.streamCoordinatorStopAuxiliaryMonitoring(
+            clearPrompt: delegate?.streamCoordinatorHasNativeAuthLocalInputPrompt != true
+        )
         delegate?.streamCoordinatorFlushPinnedLocalNoticesToTranscript()
         delegate?.streamCoordinatorRemoveSnapshot(streamID: finishedStreamID)
         activeStreamID = nil

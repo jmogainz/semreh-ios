@@ -1282,6 +1282,8 @@ private final class CoordinatorDelegateSpy: ChatStreamCoordinatorDelegate {
 
     func streamCoordinatorApplyClarificationUpdate(_ update: ClarificationPendingResponse) {}
 
+    func streamCoordinatorApplyWebsiteLogin(_ request: WebsiteLoginRequest) {}
+
     func streamCoordinatorEnqueuePendingSteerLeftover(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }

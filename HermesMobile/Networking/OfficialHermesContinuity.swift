@@ -516,6 +516,10 @@ final class OfficialHermesStreamClient: SSEStreamingClient {
     self.init(client: client, fallback: SSEClient())
   }
 
+  convenience init(client: APIClient, serverURL: URL) {
+    self.init(client: client, fallback: SSEClient(allowedServerURL: serverURL))
+  }
+
   init(client: APIClient, fallback: SSEClient) {
     self.client = client
     self.fallback = fallback
