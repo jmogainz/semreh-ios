@@ -1,6 +1,12 @@
 import Foundation
 
 enum Endpoint {
+    case officialCapabilities
+    case officialSessions
+    case officialSession(id: String)
+    case officialSessionMessages(id: String, limit: Int?, offset: Int?, order: String?)
+    case officialCreateSession
+    case officialSessionChatStream(id: String)
     case health
     case authStatus
     case login
@@ -73,7 +79,7 @@ enum Endpoint {
     case modelsLive
     case commands
     case defaultModel
-    case reasoning(model: String? = nil, provider: String? = nil, sessionEffort: String? = nil)
+    case reasoning(model: String? = nil, provider: String? = nil, sessionID: String? = nil)
     case personalities
     case setPersonality
     case profiles
@@ -128,6 +134,22 @@ enum Endpoint {
 
     var path: String {
         switch self {
+        case .officialCapabilities:
+            return "/v1/capabilities"
+        case .officialSessions, .officialCreateSession:
+            return "/api/sessions"
+        case let .officialSession(id), let .officialSessionMessages(id, _, _, _), let .officialSessionChatStream(id):
+            let encodedID = id.addingPercentEncoding(withAllowedCharacters: Self.pathSegmentAllowed) ?? id
+            switch self {
+            case .officialSession:
+                return "/api/sessions/\(encodedID)"
+            case .officialSessionMessages:
+                return "/api/sessions/\(encodedID)/messages"
+            case .officialSessionChatStream:
+                return "/api/sessions/\(encodedID)/chat/stream"
+            default:
+                return "/api/sessions/\(encodedID)"
+            }
         case .health:
             return "/health"
         case .authStatus:
@@ -379,6 +401,20 @@ enum Endpoint {
 
     var queryItems: [URLQueryItem] {
         switch self {
+        case let .officialSessionMessages(_, limit, offset, order):
+            var items: [URLQueryItem] = []
+            if let limit {
+                items.append(URLQueryItem(name: "limit", value: "\(max(0, limit))"))
+            }
+            if let offset {
+                items.append(URLQueryItem(name: "offset", value: "\(max(0, offset))"))
+            }
+            if let order {
+                items.append(URLQueryItem(name: "order", value: order))
+            }
+            return items
+        case .officialCapabilities, .officialSessions, .officialSession, .officialCreateSession, .officialSessionChatStream:
+            return []
         case let .sessions(includeArchived, archivedLimit):
             // Opt-in (issue #17): the server's default response excludes archived
             // rows, so the main list request stays byte-identical when off.
@@ -506,7 +542,7 @@ enum Endpoint {
             return request.queryItems
         case let .kanbanAddDependency(request), let .kanbanRemoveDependency(request):
             return request.queryItems
-        case let .reasoning(model, provider, sessionEffort):
+        case let .reasoning(model, provider, sessionID):
             var items: [URLQueryItem] = []
             if let model, !model.isEmpty {
                 items.append(URLQueryItem(name: "model", value: model))
@@ -514,8 +550,8 @@ enum Endpoint {
             if let provider, !provider.isEmpty {
                 items.append(URLQueryItem(name: "provider", value: provider))
             }
-            if let sessionEffort {
-                items.append(URLQueryItem(name: "session_effort", value: sessionEffort))
+            if let sessionID, !sessionID.isEmpty {
+                items.append(URLQueryItem(name: "session_id", value: sessionID))
             }
             return items
         case let .insights(days):
@@ -534,6 +570,12 @@ enum Endpoint {
     func url(relativeTo baseURL: URL) -> URL {
         let url: URL
         switch self {
+        case let .officialSession(id):
+            url = officialSessionURL(relativeTo: baseURL, id: id)
+        case let .officialSessionMessages(id, _, _, _):
+            url = officialSessionURL(relativeTo: baseURL, id: id, suffix: "/messages")
+        case let .officialSessionChatStream(id):
+            url = officialSessionURL(relativeTo: baseURL, id: id, suffix: "/chat/stream")
         case let .sessionEvents(sessionID):
             url = sessionEventsURL(relativeTo: baseURL, sessionID: sessionID)
         case let .kanbanCardDetail(request):
@@ -587,6 +629,17 @@ enum Endpoint {
             return root
         }
         components.percentEncodedPath += "/\(encodedSessionID)/events"
+        return components.url ?? root
+    }
+
+    private func officialSessionURL(relativeTo baseURL: URL, id: String, suffix: String = "") -> URL {
+        let root = baseURL.appending(path: "/api/sessions")
+        guard var components = URLComponents(url: root, resolvingAgainstBaseURL: false),
+              let encodedID = id.addingPercentEncoding(withAllowedCharacters: Self.pathSegmentAllowed)
+        else {
+            return root
+        }
+        components.percentEncodedPath += "/\(encodedID)\(suffix)"
         return components.url ?? root
     }
 

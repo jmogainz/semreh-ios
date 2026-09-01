@@ -96,6 +96,20 @@ enum CacheStore {
     }
 
     @MainActor
+    static func deleteSession(
+        sessionID: String,
+        serverURL: URL,
+        in context: ModelContext
+    ) throws {
+        let serverURLString = serverURL.absoluteString
+        let cacheKey = CachedSession.cacheKey(serverURLString: serverURLString, sessionID: sessionID)
+        if let cachedSession = try cachedSession(cacheKey: cacheKey, in: context) {
+            context.delete(cachedSession)
+        }
+        try context.save()
+    }
+
+    @MainActor
     static func cacheSession(
         _ session: SessionSummary,
         serverURL: URL,

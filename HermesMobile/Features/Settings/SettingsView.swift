@@ -14,11 +14,20 @@ struct SettingsView: View {
     let server: URL
     /// When set, Settings scrolls to this section once on first appear (#283).
     let initialScrollTarget: SettingsScrollAnchor?
+    /// Optional content rendered above the existing settings cards (for example,
+    /// the profile summary in the shell's You tab).
+    let header: AnyView?
 
-    init(authManager: AuthManager, server: URL, initialScrollTarget: SettingsScrollAnchor? = nil) {
+    init(
+        authManager: AuthManager,
+        server: URL,
+        initialScrollTarget: SettingsScrollAnchor? = nil,
+        header: AnyView? = nil
+    ) {
         self.authManager = authManager
         self.server = server
         self.initialScrollTarget = initialScrollTarget
+        self.header = header
         // The CLI-sessions toggle is server-synced (#19): loads adopt the
         // server's `show_cli_sessions`, toggles POST it back, failures revert.
         // Stored per-server so one server's value never leaks into another.
@@ -100,6 +109,10 @@ struct SettingsView: View {
         ScrollViewReader { proxy in
         ScrollView {
             VStack(spacing: settingsCardSpacing) {
+                if let header {
+                    header
+                }
+
                 SettingsCard(title: String(localized: "Identity")) {
                     SessionIdentitySettingsEditor(
                         displayName: $identityDisplayName,
@@ -499,6 +512,19 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityHint("Opens the custom request headers editor.")
+
+                    SettingsDivider()
+
+                    NavigationLink {
+                        OfficialContinuitySettingsView(authManager: authManager, account: activeAccount)
+                    } label: {
+                        SettingsAccessoryRow(
+                            title: String(localized: "Hermes Continuity"),
+                            systemImage: "arrow.triangle.merge"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Configures the optional official Hermes API sidecar.")
 
                     SettingsValueRow(title: String(localized: "Version")) {
                         serverVersionContent
@@ -1706,6 +1732,64 @@ private struct CustomHeadersSettingsView: View {
                 authManager.updateCustomHeaders(headers, persist: true)
             }
         }
+    }
+}
+
+private struct OfficialContinuitySettingsView: View {
+    @Bindable var authManager: AuthManager
+    let account: ServerAccount?
+    @Environment(\.dismiss) private var dismiss
+    @State private var officialURL: String
+    @State private var apiKey = ""
+    @State private var isWorking = false
+
+    init(authManager: AuthManager, account: ServerAccount?) {
+        self.authManager = authManager
+        self.account = account
+        _officialURL = State(initialValue: account?.officialAPIURLString ?? "")
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                SettingsCard(title: String(localized: "Hermes Continuity")) {
+                    Text(String(localized: "Completed turns can stay continuous between the TUI and Semreh through the official Hermes API. Live mid-turn TUI mirroring is not promised."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    SettingsTextFieldRow(title: String(localized: "Official API URL"), text: $officialURL, placeholder: "https://hermes.example.com", keyboardType: .URL, autocapitalization: .never)
+                    SecureField(String(localized: "API key"), text: $apiKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 11)
+                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+
+                    HStack {
+                        SettingsButton(String(localized: "Test & Save"), isLoading: isWorking) {
+                            isWorking = true
+                            Task {
+                                await authManager.testAndSaveOfficialContinuity(officialURLString: officialURL, apiKey: apiKey)
+                                isWorking = false
+                            }
+                        }
+                        .disabled(isWorking || officialURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || apiKey.isEmpty)
+                        SettingsButton(String(localized: "Disable"), role: .destructive) {
+                            authManager.disableOfficialContinuity()
+                            dismiss()
+                        }
+                    }
+
+                    if let error = authManager.lastErrorMessage {
+                        Text(error).font(.caption).foregroundStyle(.red)
+                    }
+                }
+            }
+            .padding(20)
+        }
+        .navigationTitle("Hermes Continuity")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

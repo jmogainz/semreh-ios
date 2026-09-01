@@ -5563,6 +5563,121 @@ final class ChatViewModelSendTests: XCTestCase {
     }
 
     @MainActor
+    func testModelSelectionIsVisibleBeforePersistenceAcknowledgement() async throws {
+        let requestStarted = expectation(description: "model update started")
+        let releaseRequest = DispatchSemaphore(value: 0)
+        let viewModel = try makeViewModel(
+            sessionSummary: try makeSession(model: "gpt-5.4", modelProvider: "openai")
+        ) { request in
+            switch (request.url?.path, request.httpMethod) {
+            case ("/api/session/update", "POST"):
+                requestStarted.fulfill()
+                releaseRequest.wait()
+                return apiTestJSONResponse(#"{"session":{"session_id":"session-abc","model":"gpt-5.5","model_provider":"openai"}}"#, for: request)
+            case ("/api/reasoning", "GET"):
+                return apiTestJSONResponse(#"{}"#, for: request)
+            default:
+                XCTFail("Unexpected request: \(request.httpMethod ?? "nil") \(request.url?.path ?? "nil")")
+                throw URLError(.badURL)
+            }
+        }
+
+        let selectionTask = Task { @MainActor in
+            await viewModel.selectComposerModel(ModelCatalogOption(
+                id: "gpt-5.5",
+                displayName: "GPT-5.5",
+                providerID: "openai"
+            ))
+        }
+        await fulfillment(of: [requestStarted], timeout: 2)
+
+        XCTAssertEqual(viewModel.selectedModelID, "gpt-5.5")
+        XCTAssertEqual(viewModel.selectedModelProviderID, "openai")
+        XCTAssertTrue(viewModel.isUpdatingComposerConfiguration)
+
+        releaseRequest.signal()
+        let didSelect = await selectionTask.value
+        XCTAssertTrue(didSelect)
+        XCTAssertFalse(viewModel.isUpdatingComposerConfiguration)
+    }
+
+    @MainActor
+    func testModelSelectionFailureRollsBackOptimisticChip() async throws {
+        let requestStarted = expectation(description: "model update started")
+        let releaseRequest = DispatchSemaphore(value: 0)
+        let viewModel = try makeViewModel(
+            sessionSummary: try makeSession(model: "gpt-5.4", modelProvider: "openai")
+        ) { request in
+            XCTAssertEqual(request.url?.path, "/api/session/update")
+            requestStarted.fulfill()
+            releaseRequest.wait()
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 500,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )
+            return (try XCTUnwrap(response), Data(#"{"error":"model rejected"}"#.utf8))
+        }
+
+        let selectionTask = Task { @MainActor in
+            await viewModel.selectComposerModel(ModelCatalogOption(
+                id: "gpt-5.5",
+                displayName: "GPT-5.5",
+                providerID: "openai"
+            ))
+        }
+        await fulfillment(of: [requestStarted], timeout: 2)
+        XCTAssertEqual(viewModel.selectedModelID, "gpt-5.5")
+
+        releaseRequest.signal()
+        let didSelect = await selectionTask.value
+        XCTAssertFalse(didSelect)
+        XCTAssertEqual(viewModel.selectedModelID, "gpt-5.4")
+        XCTAssertEqual(viewModel.selectedModelProviderID, "openai")
+        XCTAssertFalse(viewModel.isUpdatingComposerConfiguration)
+        XCTAssertNotNil(viewModel.composerConfigurationErrorMessage)
+    }
+
+    @MainActor
+    func testReasoningSelectionIsVisibleBeforePersistenceAndRollsBackOnFailure() async throws {
+        let requestStarted = expectation(description: "reasoning update started")
+        let releaseRequest = DispatchSemaphore(value: 0)
+        let viewModel = try makeViewModel(
+            sessionSummary: try makeSession(model: "gpt-5.4", modelProvider: "openai")
+        ) { request in
+            XCTAssertEqual(request.url?.path, "/api/reasoning")
+            XCTAssertEqual(request.httpMethod, "POST")
+            requestStarted.fulfill()
+            releaseRequest.wait()
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 500,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )
+            return (try XCTUnwrap(response), Data(#"{"error":"reasoning rejected"}"#.utf8))
+        }
+
+        let selectionTask = Task { @MainActor in
+            await viewModel.selectReasoningEffort("high")
+        }
+        await fulfillment(of: [requestStarted], timeout: 2)
+
+        XCTAssertEqual(viewModel.selectedReasoningEffort, "high")
+        XCTAssertEqual(viewModel.selectedReasoningSelection, "high")
+        XCTAssertTrue(viewModel.isUpdatingComposerConfiguration)
+
+        releaseRequest.signal()
+        let didSelect = await selectionTask.value
+        XCTAssertFalse(didSelect)
+        XCTAssertNil(viewModel.selectedReasoningEffort)
+        XCTAssertNil(viewModel.selectedReasoningSelection)
+        XCTAssertFalse(viewModel.isUpdatingComposerConfiguration)
+        XCTAssertNotNil(viewModel.composerConfigurationErrorMessage)
+    }
+
+    @MainActor
     func testSelectingComposerModelUpdatesOnlyTheSessionAndCarriesProviderOnSend() async throws {
         let openRouterModel = "deepseek/deepseek-chat-v3-0324:free"
         let streamClient = SpySSEStreamingClient()
@@ -6047,12 +6162,13 @@ final class ChatViewModelSendTests: XCTestCase {
             case "/api/reasoning":
                 let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
                 let query = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value) })
-                XCTAssertNil(query["session_id"] ?? nil)
-                let effort = query["session_effort"] ?? nil
-                reasoningGETSessionEfforts.append(effort)
+                let sessionID = try XCTUnwrap(query["session_id"] ?? nil)
+                XCTAssertTrue(sessionID == "session-alpha" || sessionID == "session-beta")
+                reasoningGETSessionEfforts.append(sessionID)
                 return apiTestJSONResponse("""
                 {
-                  "reasoning_effort": "\(effort ?? "low")",
+                  "reasoning_effort": "\(sessionID == "session-alpha" ? "low" : "high")",
+                  "session_reasoning_effort": "\(sessionID == "session-alpha" ? "low" : "high")",
                   "supported_efforts": ["low", "high"],
                   "supports_reasoning_effort": true,
                   "session_scoped_reasoning": true
@@ -6096,7 +6212,7 @@ final class ChatViewModelSendTests: XCTestCase {
 
         XCTAssertEqual(alpha.selectedReasoningEffort, "low")
         XCTAssertEqual(beta.selectedReasoningEffort, "high")
-        XCTAssertEqual(reasoningGETSessionEfforts, ["low", "high"])
+        XCTAssertEqual(reasoningGETSessionEfforts, ["session-alpha", "session-beta"])
 
         let alphaDidSelect = await alpha.selectReasoningEffort("high")
         let betaDidSelect = await beta.selectReasoningEffort("low")
@@ -6104,7 +6220,7 @@ final class ChatViewModelSendTests: XCTestCase {
         XCTAssertTrue(betaDidSelect)
         XCTAssertEqual(reasoningPOSTs.map { $0.sessionID }, ["session-alpha", "session-beta"])
         XCTAssertEqual(reasoningPOSTs.map { $0.effort }, ["high", "low"])
-        XCTAssertEqual(reasoningGETSessionEfforts, ["low", "high", "high", "low"])
+        XCTAssertEqual(reasoningGETSessionEfforts, ["session-alpha", "session-beta", "session-alpha", "session-beta"])
     }
 
     @MainActor
@@ -6201,8 +6317,8 @@ final class ChatViewModelSendTests: XCTestCase {
         XCTAssertEqual(sessionUpdateBody?["session_id"] as? String, "session-slash")
         XCTAssertEqual(sessionUpdateBody?["reasoning_effort"] as? String, "max")
         XCTAssertNil(sessionUpdateBody?["effort"])
-        XCTAssertEqual(reasoningQuery?["session_effort"] ?? nil, "max")
-        XCTAssertNil(reasoningQuery?["session_id"] ?? nil)
+        XCTAssertEqual(reasoningQuery?["session_id"] ?? nil, "session-slash")
+        XCTAssertNil(reasoningQuery?["session_effort"] ?? nil)
         XCTAssertEqual(viewModel.selectedReasoningEffort, "max")
     }
 
@@ -6238,9 +6354,10 @@ final class ChatViewModelSendTests: XCTestCase {
             case "/api/reasoning":
                 let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
                 reasoningQuery = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value) })
-                let isCleared = (reasoningQuery?["session_effort"] ?? nil) == ""
+                XCTAssertEqual(reasoningQuery?["session_id"] ?? nil, "session-inherit")
+                let didClearOverride = sessionUpdateBody != nil
                 return apiTestJSONResponse("""
-                {"reasoning_effort":"\(isCleared ? "low" : "high")","supported_efforts":["low","high","max"],"supports_reasoning_effort":true,"session_scoped_reasoning":true}
+                {"reasoning_effort":"\(didClearOverride ? "xhigh" : "high")","session_reasoning_effort":\(didClearOverride ? "null" : "\"high\""),"supported_efforts":["low","high","xhigh"],"session_scoped_reasoning":true}
                 """, for: request)
             case "/api/workspaces":
                 return apiTestJSONResponse(#"{"workspaces":[]}"#, for: request)
@@ -6261,9 +6378,10 @@ final class ChatViewModelSendTests: XCTestCase {
         XCTAssertEqual(sessionUpdateBody?["session_id"] as? String, "session-inherit")
         XCTAssertEqual(sessionUpdateBody?["reasoning_effort"] as? String, "")
         XCTAssertNil(sessionUpdateBody?["effort"])
-        XCTAssertEqual(reasoningQuery?["session_effort"] ?? nil, "")
-        XCTAssertNil(reasoningQuery?["session_id"] ?? nil)
-        XCTAssertEqual(viewModel.selectedReasoningEffort, "low")
+        XCTAssertEqual(reasoningQuery?["session_id"] ?? nil, "session-inherit")
+        XCTAssertNil(reasoningQuery?["session_effort"] ?? nil)
+        XCTAssertEqual(viewModel.selectedReasoningEffort, "xhigh")
+        XCTAssertEqual(viewModel.selectedReasoningSelection, ReasoningEffortOption.inheritID)
         XCTAssertNil(viewModel.sessionReasoningEffort)
     }
 
@@ -7943,6 +8061,61 @@ final class ChatViewModelSendTests: XCTestCase {
             headerFields: ["Content-Type": "application/json"]
         )!
         return (response, Data(#"{"error": "TTS engine unavailable"}"#.utf8))
+    }
+
+    @MainActor
+    func testCanonicalTranscriptSnapshotRecomputesDerivedStateOnce() async throws {
+        let messageJSON = (0..<120).map { index in
+            #"{"role":"user","content":"Message \#(index)","timestamp":\#(index),"message_id":"message-\#(index)"}"#
+        }.joined(separator: ",")
+        let sessionJSON = """
+        {
+          "session": {
+            "session_id": "session-abc",
+            "messages": [\(messageJSON)],
+            "message_count": 120,
+            "messages_offset": 120,
+            "messages_truncated": true
+          }
+        }
+        """
+        let viewModel = try makeViewModel { request in
+            let url = try XCTUnwrap(request.url)
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            ))
+            return (response, Data(sessionJSON.utf8))
+        }
+        let recomputationsBeforeLoad = viewModel.transcriptDerivedStateRecomputeCountForTesting
+
+        await viewModel.loadMessages()
+
+        XCTAssertEqual(viewModel.messages.count, 120)
+        XCTAssertEqual(viewModel.messagesOffset, 120)
+        XCTAssertEqual(
+            viewModel.transcriptDerivedStateRecomputeCountForTesting - recomputationsBeforeLoad,
+            1
+        )
+    }
+
+    func testTranscriptClassificationHasBoundedRuntimeAndMemory() {
+        let messages = (0..<1_000).map { index in
+            ChatMessage(
+                role: index.isMultiple(of: 2) ? "user" : "assistant",
+                content: "Transcript message \(index) with **markdown** and a tool marker.",
+                timestamp: TimeInterval(index),
+                messageId: "performance-message-\(index)"
+            )
+        }
+        let options = XCTMeasureOptions()
+        options.iterationCount = 3
+
+        measure(metrics: [XCTClockMetric(), XCTMemoryMetric()], options: options) {
+            _ = ChatViewModel.transcriptMessages(from: messages, messageOffset: 0)
+        }
     }
 
     private func makeEphemeralUserDefaults() throws -> UserDefaults {

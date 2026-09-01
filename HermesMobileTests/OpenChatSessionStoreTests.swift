@@ -11,6 +11,216 @@ final class OpenChatSessionStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testRepeatedOpenBackKeepsIdleRetentionBoundedPerServer() throws {
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let store = OpenChatSessionStore.shared
+
+        for index in 0..<100 {
+            _ = store.viewModel(
+                session: SessionSummary(sessionId: "session-\(index)"),
+                server: server
+            )
+        }
+
+        let retainedSessionIDs = store.retainedSessionIDsForTesting(for: server)
+        XCTAssertLessThanOrEqual(
+            retainedSessionIDs.count,
+            8,
+            "The production retention cap should keep repeated open/back idle retention bounded."
+        )
+        XCTAssertEqual(retainedSessionIDs, (92..<100).map { "session-\($0)" })
+    }
+
+    @MainActor
+    func testIdleRetentionEvictsLeastRecentlyUsedModelAfterReuse() throws {
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let store = OpenChatSessionStore(
+            retentionPolicy: OpenChatSessionStoreRetentionPolicy(maxIdleViewModelsPerServer: 2)
+        )
+        let first = store.viewModel(session: SessionSummary(sessionId: "session-first"), server: server)
+        _ = store.viewModel(session: SessionSummary(sessionId: "session-second"), server: server)
+        let reusedFirst = store.viewModel(session: SessionSummary(sessionId: "session-first"), server: server)
+        _ = store.viewModel(session: SessionSummary(sessionId: "session-third"), server: server)
+
+        XCTAssertTrue(reusedFirst === first)
+        XCTAssertEqual(
+            store.retainedSessionIDsForTesting(for: server),
+            ["session-first", "session-third"]
+        )
+        XCTAssertFalse(store.retainedSessionIDsForTesting(for: server).contains("session-second"))
+    }
+
+    @MainActor
+    func testActiveModelsArePreservedWhileIdleModelsAreEvicted() throws {
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let store = OpenChatSessionStore(
+            retentionPolicy: OpenChatSessionStoreRetentionPolicy(maxIdleViewModelsPerServer: 2)
+        )
+        let active = try makeViewModel(sessionID: "session-active", activeStreamID: "stream-active")
+        _ = store.adoptedViewModel(
+            session: SessionSummary(sessionId: "session-active"),
+            server: server,
+            creating: active
+        )
+        _ = store.viewModel(session: SessionSummary(sessionId: "session-idle-1"), server: server)
+        _ = store.viewModel(session: SessionSummary(sessionId: "session-idle-2"), server: server)
+        _ = store.viewModel(session: SessionSummary(sessionId: "session-idle-3"), server: server)
+        _ = store.viewModel(session: SessionSummary(sessionId: "session-idle-4"), server: server)
+
+        XCTAssertTrue(store.viewModel(session: SessionSummary(sessionId: "session-active"), server: server) === active)
+        XCTAssertEqual(
+            Set(store.retainedSessionIDsForTesting(for: server)),
+            ["session-active", "session-idle-3", "session-idle-4"]
+        )
+        XCTAssertEqual(store.liveSessionIDs(for: server), ["session-active"])
+        XCTAssertEqual(store.liveStreamIDs(for: server), ["stream-active"])
+    }
+
+    @MainActor
+    func testActiveToIdleNotificationTrimsPreviouslyProtectedModel() async throws {
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let store = OpenChatSessionStore(
+            retentionPolicy: OpenChatSessionStoreRetentionPolicy(maxIdleViewModelsPerServer: 1)
+        )
+        let active = try makeViewModel(sessionID: "session-active", activeStreamID: "stream-active") { request in
+            apiTestJSONResponse("{\"ok\": true}", for: request)
+        }
+        _ = store.adoptedViewModel(
+            session: SessionSummary(sessionId: "session-active"),
+            server: server,
+            creating: active
+        )
+        _ = store.viewModel(session: SessionSummary(sessionId: "session-idle-1"), server: server)
+        _ = store.viewModel(session: SessionSummary(sessionId: "session-idle-2"), server: server)
+        XCTAssertTrue(store.retainedSessionIDsForTesting(for: server).contains("session-active"))
+
+        // The existing cancellation path clears activeStreamID. The explicit store
+        // notification then makes the now-idle model eligible for deterministic LRU trim.
+        let didCancel = await active.cancelActiveStream()
+        XCTAssertTrue(didCancel)
+        store.noteStreamingStateChanged()
+
+        XCTAssertNil(active.activeStreamID)
+        XCTAssertEqual(store.retainedSessionIDsForTesting(for: server), ["session-idle-2"])
+    }
+
+    @MainActor
+    func testRetentionIsIsolatedPerServer() throws {
+        let serverA = try XCTUnwrap(URL(string: "https://a.example.test"))
+        let serverB = try XCTUnwrap(URL(string: "https://b.example.test"))
+        let store = OpenChatSessionStore(
+            retentionPolicy: OpenChatSessionStoreRetentionPolicy(maxIdleViewModelsPerServer: 1)
+        )
+        let serverBModel = store.viewModel(session: SessionSummary(sessionId: "server-b-session"), server: serverB)
+        _ = store.viewModel(session: SessionSummary(sessionId: "server-a-first"), server: serverA)
+        _ = store.viewModel(session: SessionSummary(sessionId: "server-a-second"), server: serverA)
+
+        XCTAssertEqual(store.retainedSessionIDsForTesting(for: serverA), ["server-a-second"])
+        XCTAssertEqual(store.retainedSessionIDsForTesting(for: serverB), ["server-b-session"])
+        XCTAssertTrue(store.viewModel(session: SessionSummary(sessionId: "server-b-session"), server: serverB) === serverBModel)
+    }
+
+    @MainActor
+    func testEvictionStopsSessionEventSyncBeforeReleasingModel() throws {
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let store = OpenChatSessionStore(
+            retentionPolicy: OpenChatSessionStoreRetentionPolicy(maxIdleViewModelsPerServer: 1)
+        )
+        let eventClient = SpySSEStreamingClient()
+        let evicted = try makeViewModel(sessionID: "session-evicted", sessionEventStreamClient: eventClient)
+        evicted.startSessionEventSync()
+        XCTAssertEqual(eventClient.startedURLs.count, 1)
+        _ = store.adoptedViewModel(
+            session: SessionSummary(sessionId: "session-evicted"),
+            server: server,
+            creating: evicted
+        )
+
+        _ = store.viewModel(session: SessionSummary(sessionId: "session-new"), server: server)
+
+        XCTAssertEqual(eventClient.stopCount, 1)
+        XCTAssertEqual(store.retainedSessionIDsForTesting(for: server), ["session-new"])
+    }
+
+    @MainActor
+    func testAdoptedModelsRefreshRecencyWhenReadopted() throws {
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let store = OpenChatSessionStore(
+            retentionPolicy: OpenChatSessionStoreRetentionPolicy(maxIdleViewModelsPerServer: 2)
+        )
+        let first = try makeViewModel(sessionID: "adopted-first")
+        let second = try makeViewModel(sessionID: "adopted-second")
+
+        _ = store.adoptedViewModel(
+            session: SessionSummary(sessionId: "adopted-first"),
+            server: server,
+            creating: first
+        )
+        _ = store.adoptedViewModel(
+            session: SessionSummary(sessionId: "adopted-second"),
+            server: server,
+            creating: second
+        )
+        _ = store.adoptedViewModel(
+            session: SessionSummary(sessionId: "adopted-first"),
+            server: server,
+            creating: first
+        )
+        _ = store.viewModel(session: SessionSummary(sessionId: "adopted-third"), server: server)
+
+        XCTAssertEqual(store.retainedSessionIDsForTesting(for: server), ["adopted-first", "adopted-third"])
+    }
+
+    @MainActor
+    func testAdoptedModelsParticipateInBoundedLRURetention() throws {
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let store = OpenChatSessionStore(
+            retentionPolicy: OpenChatSessionStoreRetentionPolicy(maxIdleViewModelsPerServer: 1)
+        )
+        let first = try makeViewModel(sessionID: "adopted-first")
+        let second = try makeViewModel(sessionID: "adopted-second")
+
+        _ = store.adoptedViewModel(
+            session: SessionSummary(sessionId: "adopted-first"),
+            server: server,
+            creating: first
+        )
+        _ = store.adoptedViewModel(
+            session: SessionSummary(sessionId: "adopted-second"),
+            server: server,
+            creating: second
+        )
+
+        XCTAssertEqual(store.retainedSessionIDsForTesting(for: server), ["adopted-second"])
+        XCTAssertTrue(store.viewModel(session: SessionSummary(sessionId: "adopted-second"), server: server) === second)
+    }
+
+    @MainActor
+    func testResetClearsRetainedModelsOrderingAndLiveState() throws {
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let store = OpenChatSessionStore(
+            retentionPolicy: OpenChatSessionStoreRetentionPolicy(maxIdleViewModelsPerServer: 2)
+        )
+        let eventClient = SpySSEStreamingClient()
+        let retained = try makeViewModel(sessionID: "session-reset", sessionEventStreamClient: eventClient)
+        retained.startSessionEventSync()
+        _ = store.adoptedViewModel(
+            session: SessionSummary(sessionId: "session-reset"),
+            server: server,
+            creating: retained
+        )
+
+        store.resetForTesting()
+
+        XCTAssertEqual(eventClient.stopCount, 1)
+        XCTAssertEqual(store.retainedViewModelCountForTesting(for: server), 0)
+        XCTAssertTrue(store.liveSessionIDs(for: server).isEmpty)
+        XCTAssertTrue(store.liveStreamIDs(for: server).isEmpty)
+        XCTAssertEqual(store.liveOwnershipGeneration, 0)
+        XCTAssertFalse(store.viewModel(session: SessionSummary(sessionId: "session-reset"), server: server) === retained)
+    }
+
+    @MainActor
     func testStoreReusesTheSameViewModelForTheSameServerAndSession() throws {
         let first = try makeViewModel(sessionID: "session-abc")
         let reused = OpenChatSessionStore.shared.adoptedViewModel(
@@ -26,6 +236,97 @@ final class OpenChatSessionStoreTests: XCTestCase {
         XCTAssertTrue(reused === first)
         XCTAssertTrue(second === first)
         XCTAssertTrue(second.wasReusedFromOpenSessionStore)
+    }
+
+    @MainActor
+    func testStoreReusesGitAvailabilityViewModelAcrossRepeatedRequests() throws {
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let session = SessionSummary(sessionId: "session-git")
+        let store = OpenChatSessionStore.shared
+        let chatViewModel = store.viewModel(session: session, server: server)
+        let first = store.gitAvailabilityViewModel(
+            session: session,
+            server: server,
+            chatViewModel: chatViewModel
+        )
+
+        for _ in 0..<100 {
+            let reused = store.gitAvailabilityViewModel(
+                session: session,
+                server: server,
+                chatViewModel: chatViewModel
+            )
+            XCTAssertTrue(reused === first)
+        }
+    }
+
+    @MainActor
+    func testGitAvailabilityViewModelsAreIsolatedByServerAndSession() throws {
+        let serverA = try XCTUnwrap(URL(string: "https://a.example.test"))
+        let serverB = try XCTUnwrap(URL(string: "https://b.example.test"))
+        let store = OpenChatSessionStore.shared
+        let sessionA = SessionSummary(sessionId: "session-a")
+        let sessionB = SessionSummary(sessionId: "session-b")
+        let chatA = store.viewModel(session: sessionA, server: serverA)
+        let chatB = store.viewModel(session: sessionB, server: serverB)
+
+        let auxiliaryA = store.gitAvailabilityViewModel(
+            session: sessionA,
+            server: serverA,
+            chatViewModel: chatA
+        )
+        let auxiliaryB = store.gitAvailabilityViewModel(
+            session: sessionB,
+            server: serverB,
+            chatViewModel: chatB
+        )
+
+        XCTAssertFalse(auxiliaryA === auxiliaryB)
+        XCTAssertTrue(
+            store.gitAvailabilityViewModel(
+                session: sessionA,
+                server: serverA,
+                chatViewModel: chatA
+            ) === auxiliaryA
+        )
+    }
+
+    @MainActor
+    func testGitAvailabilityViewModelEvictionAndResetReleaseAuxiliaryEntry() throws {
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let store = OpenChatSessionStore(
+            retentionPolicy: OpenChatSessionStoreRetentionPolicy(maxIdleViewModelsPerServer: 1)
+        )
+        weak var evictedAuxiliary: GitWorkspaceAvailabilityViewModel?
+
+        do {
+            let session = SessionSummary(sessionId: "session-evicted")
+            let chatViewModel = store.viewModel(session: session, server: server)
+            evictedAuxiliary = store.gitAvailabilityViewModel(
+                session: session,
+                server: server,
+                chatViewModel: chatViewModel
+            )
+        }
+
+        _ = store.viewModel(
+            session: SessionSummary(sessionId: "session-retained"),
+            server: server
+        )
+        XCTAssertNil(evictedAuxiliary)
+
+        weak var resetAuxiliary: GitWorkspaceAvailabilityViewModel?
+        do {
+            let session = SessionSummary(sessionId: "session-reset")
+            let chatViewModel = store.viewModel(session: session, server: server)
+            resetAuxiliary = store.gitAvailabilityViewModel(
+                session: session,
+                server: server,
+                chatViewModel: chatViewModel
+            )
+        }
+        store.resetForTesting()
+        XCTAssertNil(resetAuxiliary)
     }
 
     @MainActor
@@ -54,6 +355,25 @@ final class OpenChatSessionStoreTests: XCTestCase {
         // Re-appearing restarts the stream after an explicit stop.
         viewModel.startSessionEventSync()
         XCTAssertEqual(streamClient.startedURLs.count, 2)
+    }
+
+    @MainActor
+    func testOfficialSidecarDoesNotStartWebUISessionEventStream() async throws {
+        let streamClient = SpySSEStreamingClient()
+        let capabilities = #"{"features":{"session_resources":true,"session_chat":true,"session_chat_streaming":true},"endpoints":{"sessions":{"method":"GET","path":"/api/sessions"},"session_create":{"method":"POST","path":"/api/sessions"},"session":{"method":"GET","path":"/api/sessions/{session_id}"},"session_messages":{"method":"GET","path":"/api/sessions/{session_id}/messages"},"session_chat_stream":{"method":"POST","path":"/api/sessions/{session_id}/chat/stream"}}}"#
+        let viewModel = try makeViewModel(
+            sessionID: "official-session",
+            sessionEventStreamClient: streamClient,
+            usesOfficialContinuity: true,
+            handler: { request in
+                apiTestJSONResponse(capabilities, for: request)
+            }
+        )
+
+        viewModel.startSessionEventSync()
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(streamClient.startedURLs.count, 0)
     }
 
     @MainActor
@@ -87,6 +407,33 @@ final class OpenChatSessionStoreTests: XCTestCase {
         )
         let seenIDs = cursorStore.loadSeenEventIDs(server: server, profile: nil, sessionID: "session-abc")
         XCTAssertEqual(seenIDs.last, "session-abc:19")
+    }
+
+    @MainActor
+    func testOpaqueEventIDsAdvanceInServerDeliveryOrder() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "goku.session-event-order-\(UUID().uuidString)"))
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let streamClient = SpySSEStreamingClient()
+        let cursorStore = SessionEventCursorStore(defaults: defaults)
+        let coordinator = SessionEventStreamCoordinator(
+            server: server,
+            sessionID: "session-abc",
+            profile: nil,
+            streamClient: streamClient,
+            userDefaults: defaults
+        )
+        coordinator.start()
+        let connection = streamClient.startedURLs.count - 1
+        streamClient.emit(.token("first"), lastEventID: "journal:10", onConnection: connection)
+        // Event IDs are opaque. Even though this looks numerically lower, the
+        // server delivered it later, so it becomes the resume point.
+        streamClient.emit(.token("second"), lastEventID: "journal:8", onConnection: connection)
+        coordinator.stop()
+
+        XCTAssertEqual(
+            cursorStore.load(server: server, profile: nil, sessionID: "session-abc"),
+            "journal:8"
+        )
     }
 
     @MainActor
@@ -546,6 +893,103 @@ final class OpenChatSessionStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testSessionEventCoordinatorReconnectsAfterAcceptedSnapshotWithoutCursor() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "semreh.session-event-snapshot-reconnect-\(UUID().uuidString)"))
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let streamClient = SpySSEStreamingClient()
+        let coordinator = SessionEventStreamCoordinator(
+            server: server,
+            sessionID: "session-abc",
+            profile: nil,
+            streamClient: streamClient,
+            userDefaults: defaults
+        )
+        coordinator.onSnapshot = { _ in true }
+
+        coordinator.start()
+        streamClient.emit(
+            .sessionSnapshot(SessionSummary(sessionId: "session-abc", title: "Recovered")),
+            lastEventID: "journal:42"
+        )
+
+        try await Task.sleep(nanoseconds: 350_000_000)
+        XCTAssertEqual(streamClient.startedURLs.count, 2)
+        XCTAssertNil(streamClient.resumeEventIDs.last ?? nil)
+        coordinator.stop()
+    }
+
+    @MainActor
+    func testRejectedSnapshotDoesNotClearDurableCursor() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "semreh.session-event-rejected-\(UUID().uuidString)"))
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let streamClient = SpySSEStreamingClient()
+        let cursorStore = SessionEventCursorStore(defaults: defaults)
+        cursorStore.save(
+            eventID: "journal:41",
+            server: server,
+            profile: nil,
+            sessionID: "session-abc"
+        )
+        let coordinator = SessionEventStreamCoordinator(
+            server: server,
+            sessionID: "session-abc",
+            profile: nil,
+            streamClient: streamClient,
+            userDefaults: defaults
+        )
+        coordinator.onSnapshot = { _ in false }
+
+        coordinator.start()
+        streamClient.emit(
+            .sessionSnapshot(SessionSummary(sessionId: "session-abc", title: "Rejected")),
+            lastEventID: "journal:42"
+        )
+        coordinator.stop()
+
+        XCTAssertEqual(
+            cursorStore.load(server: server, profile: nil, sessionID: "session-abc"),
+            "journal:41"
+        )
+        XCTAssertEqual(streamClient.startedURLs.count, 1)
+    }
+
+    @MainActor
+    func testOverlappingOpenSessionRefreshesShareOneCanonicalLoad() async throws {
+        let server = try XCTUnwrap(URL(string: "https://example.test"))
+        let viewModel = try makeViewModel(sessionID: "session-abc") { request in
+            XCTAssertEqual(request.url?.path, "/api/session")
+            return apiTestJSONResponse("""
+            {
+              "session": {
+                "session_id": "session-abc",
+                "messages": [
+                  {"role": "user", "content": "Canonical", "message_id": "canonical-1", "timestamp": 1770000000}
+                ]
+              }
+            }
+            """, for: request)
+        }
+        _ = OpenChatSessionStore.shared.adoptedViewModel(
+            session: SessionSummary(sessionId: "session-abc"),
+            server: server,
+            creating: viewModel
+        )
+
+        let first = Task { @MainActor in
+            await OpenChatSessionStore.shared.refreshOpenSessions(for: server)
+        }
+        let second = Task { @MainActor in
+            await OpenChatSessionStore.shared.refreshOpenSessions(for: server)
+        }
+
+        let firstCount = await first.value
+        let secondCount = await second.value
+        XCTAssertEqual(firstCount, 1)
+        XCTAssertEqual(secondCount, 1)
+        XCTAssertEqual(viewModel.messages.map(\.content), ["Canonical"])
+    }
+
+    @MainActor
     func testSyntheticSessionDoesNotStartSessionEventSync() throws {
         let server = try XCTUnwrap(URL(string: "https://example.test"))
         let streamClient = SpySSEStreamingClient()
@@ -601,6 +1045,8 @@ final class OpenChatSessionStoreTests: XCTestCase {
         sessionID: String,
         activeStreamID: String? = nil,
         streamClient: SSEStreamingClient? = nil,
+        sessionEventStreamClient: SSEStreamingClient? = nil,
+        usesOfficialContinuity: Bool = false,
         handler: ((URLRequest) throws -> (HTTPURLResponse, Data))? = nil
     ) throws -> ChatViewModel {
         if let handler {
@@ -616,7 +1062,18 @@ final class OpenChatSessionStoreTests: XCTestCase {
         configuration.protocolClasses = [MockURLProtocol.self]
         let urlSession = URLSession(configuration: configuration)
         let server = try XCTUnwrap(URL(string: "https://example.test"))
-        let client = APIClient(baseURL: server, session: urlSession)
+        let officialClient = usesOfficialContinuity
+            ? OfficialHermesContinuityClient(
+                baseURL: try XCTUnwrap(URL(string: "https://official.example.test")),
+                session: urlSession,
+                customHeaderProvider: { [] }
+            )
+            : nil
+        let client = APIClient(
+            baseURL: server,
+            session: urlSession,
+            officialContinuityClient: officialClient
+        )
         let resolvedStreamClient = streamClient ?? SpySSEStreamingClient()
         let viewModel = ChatViewModel(
             session: SessionSummary(sessionId: sessionID, activeStreamId: activeStreamID),
@@ -625,7 +1082,7 @@ final class OpenChatSessionStoreTests: XCTestCase {
             streamClient: resolvedStreamClient,
             approvalStreamClient: SpySSEStreamingClient(),
             clarifyStreamClient: SpySSEStreamingClient(),
-            sessionEventStreamClient: SpySSEStreamingClient(),
+            sessionEventStreamClient: sessionEventStreamClient ?? SpySSEStreamingClient(),
             listenAudioSession: SpyListenAudioSession(),
             listenRemoteControlCenter: SpyListenRemoteControlCenter()
         )

@@ -435,10 +435,10 @@ final class APIClientSessionMutationTests: APIClientTestCase {
                     url: try XCTUnwrap(request.url),
                     resolvingAgainstBaseURL: false
                 )?.queryItems
-                XCTAssertEqual(query?.first(where: { $0.name == "session_effort" })?.value, "high")
-                XCTAssertNil(query?.first(where: { $0.name == "session_id" }))
+                XCTAssertEqual(query?.first(where: { $0.name == "session_id" })?.value, "session-abc")
+                XCTAssertNil(query?.first(where: { $0.name == "session_effort" }))
                 return apiTestJSONResponse(
-                    #"{"reasoning_effort":"high","session_scoped_reasoning":true}"#,
+                    #"{"reasoning_effort":"high","session_reasoning_effort":"high","session_scoped_reasoning":true}"#,
                     for: request
                 )
             default:

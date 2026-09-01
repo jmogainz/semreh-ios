@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Combine
 
 struct SessionListRowActions {
     let retryLoad: () -> Void
@@ -67,6 +68,88 @@ enum SessionListMotion {
 
     static func disclosureContentTransition(reduceMotion: Bool) -> AnyTransition {
         reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top))
+    }
+}
+
+/// Server-scoped local read markers for the shell's Messages-style rows.
+///
+/// The sessions endpoint provides message counts and timestamps, but it does
+/// not provide a last-read marker. We therefore persist only the local marker
+/// and derive unread state from a later timestamp when the payload proves that
+/// non-user messages exist. First sight of an existing session is seeded as
+/// read so opening the shell does not mark the entire history unread.
+final class SessionReadStateStore: ObservableObject {
+    static let shared = SessionReadStateStore()
+
+    private static let keyPrefix = "semreh.session.last-read-at.v1"
+
+    @Published private(set) var revision = 0
+
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func isUnread(for session: SessionSummary, server: URL) -> Bool {
+        guard let marker = latestAgentActivityMarker(for: session),
+              let key = markerKey(for: session, server: server)
+        else {
+            return false
+        }
+
+        guard let storedMarker = defaults.object(forKey: key) as? Double else {
+            defaults.set(marker, forKey: key)
+            return false
+        }
+
+        return marker > storedMarker
+    }
+
+    func markRead(_ session: SessionSummary, server: URL) {
+        guard let marker = latestActivityMarker(for: session),
+              let key = markerKey(for: session, server: server)
+        else {
+            return
+        }
+
+        defaults.set(marker, forKey: key)
+        revision &+= 1
+    }
+
+    static func hasAgentReplySignal(_ session: SessionSummary) -> Bool {
+        guard let totalMessages = session.messageCount,
+              let userMessages = session.userMessageCount
+        else {
+            return false
+        }
+
+        return totalMessages > userMessages
+    }
+
+    private func latestAgentActivityMarker(for session: SessionSummary) -> Double? {
+        guard Self.hasAgentReplySignal(session) else { return nil }
+        return latestActivityMarker(for: session)
+    }
+
+    private func latestActivityMarker(for session: SessionSummary) -> Double? {
+        let marker = session.lastMessageAt ?? session.updatedAt ?? session.createdAt
+        guard let marker, marker > 0 else { return nil }
+        return marker
+    }
+
+    private func markerKey(for session: SessionSummary, server: URL) -> String? {
+        let sessionID = session.sessionId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let sessionID, !sessionID.isEmpty else { return nil }
+
+        var components = URLComponents(url: server, resolvingAgainstBaseURL: false)
+        components?.user = nil
+        components?.password = nil
+        components?.query = nil
+        components?.fragment = nil
+        let serverKey = components?.string ?? server.host ?? "unknown-server"
+
+        return "\(Self.keyPrefix).\(serverKey).\(sessionID)"
     }
 }
 
@@ -387,6 +470,7 @@ struct SessionSidebarUtilityRows: View {
 
 struct SessionListRowsSection: View {
     let viewModel: SessionListViewModel
+    var server: URL? = nil
 
     let sessions: [SessionSummary]
     let emptyTitle: String
@@ -397,11 +481,15 @@ struct SessionListRowsSection: View {
     let selectedSessionID: String?
     let actions: SessionListRowActions
     var suppressEmptyState = false
+    var useMessagesStyle = false
+    var showsSectionHeader = true
 
     var body: some View {
-        sessionsHeaderRow
-            .padding(.top, isSearchActive ? 16 : 28)
-            .sessionsScreenListRow()
+        if showsSectionHeader {
+            sessionsHeaderRow
+                .padding(.top, isSearchActive ? 16 : 28)
+                .sessionsScreenListRow()
+        }
 
         if viewModel.isLoading && viewModel.sessions.isEmpty {
             sessionLoadingSkeletonRows
@@ -421,10 +509,12 @@ struct SessionListRowsSection: View {
                 SessionInteractiveRow(
                     viewModel: viewModel,
                     session: session,
+                    server: server,
                     showsMessageCount: showsMessageCount,
                     showsWorkspace: showsWorkspace,
                     selectedSessionID: selectedSessionID,
-                    actions: actions
+                    actions: actions,
+                    useMessagesStyle: useMessagesStyle
                 )
             }
         }
@@ -508,21 +598,31 @@ struct SessionInteractiveRow: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let viewModel: SessionListViewModel
     let session: SessionSummary
+    var server: URL? = nil
     let showsMessageCount: Bool
     let showsWorkspace: Bool
     let selectedSessionID: String?
     let actions: SessionListRowActions
+    var useMessagesStyle = false
 
     var body: some View {
         Button {
             actions.open(session)
         } label: {
-            SessionRowView(
-                session: session,
-                showsMessageCount: showsMessageCount,
-                showsWorkspace: showsWorkspace,
-                isViewingCachedData: viewModel.isViewingCachedData
-            )
+            if useMessagesStyle {
+                MessagesSessionRowView(
+                    session: session,
+                    isViewingCachedData: viewModel.isViewingCachedData,
+                    server: server
+                )
+            } else {
+                SessionRowView(
+                    session: session,
+                    showsMessageCount: showsMessageCount,
+                    showsWorkspace: showsWorkspace,
+                    isViewingCachedData: viewModel.isViewingCachedData
+                )
+            }
         }
         .buttonStyle(.plain)
         .id(session.id)
@@ -552,7 +652,11 @@ struct SessionInteractiveRow: View {
                 actions: actions
             )
         }
-        .sessionsScreenListRow(insets: EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
+        .sessionsScreenListRow(
+            insets: useMessagesStyle
+                ? EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
+                : EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12)
+        )
     }
 
     @ViewBuilder

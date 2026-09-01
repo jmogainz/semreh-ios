@@ -42,6 +42,8 @@ final class AuthManager {
     private let headerStore: CustomHeaderStore
     private let logoutTimeout: Duration
     private let serverRegistry: ServerRegistry
+    private let officialStore: OfficialContinuityConfigurationStore
+    private let officialClientFactory: @Sendable (URL, String) -> OfficialHermesContinuityClient
 
     init(
         keychain: any KeychainStoring = KeychainStore(),
@@ -51,7 +53,13 @@ final class AuthManager {
         },
         headerStore: CustomHeaderStore = .shared,
         logoutTimeout: Duration = .seconds(5),
-        serverRegistry: ServerRegistry = .shared
+        serverRegistry: ServerRegistry = .shared,
+        officialStore: OfficialContinuityConfigurationStore = .shared,
+        officialClientFactory: @escaping @Sendable (URL, String) -> OfficialHermesContinuityClient = { url, key in
+            OfficialHermesContinuityClient(baseURL: url, customHeaderProvider: {
+                [CustomHeader(name: "Authorization", value: "Bearer \(key)")]
+            })
+        }
     ) {
         self.keychain = keychain
         self.clientFactory = clientFactory
@@ -59,6 +67,8 @@ final class AuthManager {
         self.headerStore = headerStore
         self.logoutTimeout = logoutTimeout
         self.serverRegistry = serverRegistry
+        self.officialStore = officialStore
+        self.officialClientFactory = officialClientFactory
         restoreSavedServer()
         refreshServers()
     }
@@ -155,6 +165,7 @@ final class AuthManager {
             persistCustomHeaders(for: serverURL)
             refreshServers()
             state = .loggedIn(server: serverURL)
+            hydrateOfficialContinuity(for: serverURL)
         } catch {
             lastErrorMessage = error.localizedDescription
         }
@@ -239,6 +250,7 @@ final class AuthManager {
             persistCustomHeaders(for: serverURL)
             refreshServers()
             state = .loggedIn(server: serverURL)
+            hydrateOfficialContinuity(for: serverURL)
             return .added(serverURL)
         } catch {
             lastErrorMessage = error.localizedDescription
@@ -314,6 +326,7 @@ final class AuthManager {
         refreshServers()
         try? keychain.save(serverURL.absoluteString, forKey: .serverURL)
         hydrateCustomHeaders(for: serverURL)
+        hydrateOfficialContinuity(for: serverURL)
         // Drop the App Intents profile picker cache (#339): it holds the previous server's
         // profiles, which would leak into Shortcuts / Siri if the new server's fetch is
         // delayed or fails. The new server's profiles reload on the next foreground fetch.
@@ -358,6 +371,7 @@ final class AuthManager {
         if let nextActive, let nextURL = URL(string: nextActive.urlString) {
             try? keychain.save(nextURL.absoluteString, forKey: .serverURL)
             hydrateCustomHeaders(for: nextURL)
+            hydrateOfficialContinuity(for: nextURL)
             lastErrorMessage = nil
             state = .loggedIn(server: nextURL)
         } else {
@@ -371,6 +385,8 @@ final class AuthManager {
     /// its cookies — without touching the registry or the global `server_url` key.
     private func clearLocalArtifacts(for server: URL) {
         try? keychain.delete(.customHeaders, scope: server.absoluteString)
+        try? keychain.delete(.officialAPIKey, scope: server.absoluteString)
+        officialStore.remove(primaryURL: server)
         clearSessionCookies(for: server)
     }
 
@@ -445,6 +461,7 @@ final class AuthManager {
         serverRegistry.forgetActiveServer()
         refreshServers()
         headerStore.replace(with: [])
+        if let server { officialStore.remove(primaryURL: server) }
         // Drop the App Intents profile picker cache (#339) so a signed-out user doesn't see
         // the previous server's profiles lingering in Shortcuts / Siri.
         ProfileEntityCache.shared.save([])
@@ -524,7 +541,52 @@ final class AuthManager {
         // first launch after the split) before any client is built, so the first
         // request after launch carries the saved headers (#255/#16).
         hydrateCustomHeaders(for: savedURL)
+        hydrateOfficialContinuity(for: savedURL)
         state = .loggedIn(server: savedURL)
+    }
+
+    func testAndSaveOfficialContinuity(officialURLString: String, apiKey: String) async {
+        guard let primary = state.server,
+              !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            lastErrorMessage = String(localized: "Enter an official API URL and API key.")
+            return
+        }
+        do {
+            let officialURL = try Self.normalizedServerURL(from: officialURLString)
+            let client = officialClientFactory(officialURL, apiKey)
+            try await client.probeSessionContinuity()
+            try keychain.save(apiKey, forKey: .officialAPIKey, scope: primary.absoluteString)
+            officialStore.configure(primaryURL: primary, officialURL: officialURL, bearerKey: apiKey)
+            if var account = serverRegistry.activeServer {
+                account.officialAPIURLString = officialURL.absoluteString
+                serverRegistry.update(account)
+                refreshServers()
+            }
+            lastErrorMessage = nil
+        } catch { lastErrorMessage = error.localizedDescription }
+    }
+
+    func disableOfficialContinuity() {
+        guard let primary = state.server else { return }
+        try? keychain.delete(.officialAPIKey, scope: primary.absoluteString)
+        officialStore.remove(primaryURL: primary)
+        if var account = serverRegistry.activeServer {
+            account.officialAPIURLString = nil
+            serverRegistry.update(account)
+            refreshServers()
+        }
+    }
+
+    private func hydrateOfficialContinuity(for primary: URL) {
+        guard let account = serverRegistry.servers.first(where: { $0.id == primary.absoluteString }),
+              let rawURL = account.officialAPIURLString,
+              let officialURL = URL(string: rawURL),
+              let key = try? keychain.load(.officialAPIKey, scope: primary.absoluteString),
+              !key.isEmpty else {
+            officialStore.remove(primaryURL: primary)
+            return
+        }
+        officialStore.configure(primaryURL: primary, officialURL: officialURL, bearerKey: key)
     }
 
     nonisolated static func normalizedServerURL(from rawValue: String) throws -> URL {

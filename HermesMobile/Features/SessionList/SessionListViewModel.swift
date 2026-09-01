@@ -53,6 +53,20 @@ enum ActiveSessionStateRefreshResult: Equatable {
     case failed
 }
 
+private struct PendingSessionDeletion {
+    let sessionsBeforeDeletion: [SessionSummary]
+    let archivedCountBeforeDeletion: Int?
+    let successfulLoadGenerationAtStart: Int
+    var latestCanonicalSessions: [SessionSummary]?
+    var latestCanonicalArchivedCount: Int?
+}
+
+private struct SessionMutationRejectedError: LocalizedError {
+    let message: String
+
+    var errorDescription: String? { message }
+}
+
 @MainActor
 @Observable
 final class SessionListViewModel {
@@ -97,6 +111,14 @@ final class SessionListViewModel {
     private let sessionMutator: SessionMutator
     private let server: URL
     private var loadGeneration = 0
+    /// Monotonic generation of the newest successful canonical `/api/sessions`
+    /// response. Optimistic rollbacks never overwrite a newer server result.
+    private var successfulLoadGeneration = 0
+    private var pendingSessionDeletions: [String: PendingSessionDeletion] = [:]
+    /// Confirmed deletes remain hidden until a later process/session lifecycle;
+    /// this prevents an eventually-consistent list response from resurrecting a
+    /// row that the delete endpoint already acknowledged.
+    private var confirmedSessionDeletionIDs: Set<String> = []
     private var cacheFirstSessionPlaceholder: [SessionSummary]?
     private var sessionsBeforeCacheFirstPlaceholder: [SessionSummary] = []
 
@@ -240,8 +262,14 @@ final class SessionListViewModel {
         do {
             let response = try await client.sessions()
             guard loadGeneration == generation else { return false }
-            let visibleSessions = (response.sessions ?? [])
+            let canonicalVisibleSessions = (response.sessions ?? [])
                 .filter { $0.archived != true && $0.shouldAppearInSessionList }
+            for sessionID in pendingSessionDeletions.keys {
+                pendingSessionDeletions[sessionID]?.latestCanonicalSessions = canonicalVisibleSessions
+                pendingSessionDeletions[sessionID]?.latestCanonicalArchivedCount = response.archivedCount
+            }
+            let visibleSessions = sessionsAfterOptimisticDeletions(canonicalVisibleSessions)
+            successfulLoadGeneration = generation
             applySessions(visibleSessions, archivedCount: response.archivedCount, animation: animation)
             isViewingCachedData = false
             clearCacheFirstSessionPlaceholder()
@@ -263,8 +291,10 @@ final class SessionListViewModel {
             sessionLoadError = error
             if CacheFallbackPolicy.shouldUseCache(for: error), let modelContext {
                 do {
-                    let cachedSessions = try CacheStore.cachedSessions(serverURL: server, in: modelContext)
-                        .filter(\.shouldAppearInSessionList)
+                    let cachedSessions = sessionsAfterOptimisticDeletions(
+                        try CacheStore.cachedSessions(serverURL: server, in: modelContext)
+                            .filter(\.shouldAppearInSessionList)
+                    )
                     if !cachedSessions.isEmpty {
                         sessions = cachedSessions
                         isViewingCachedData = true
@@ -298,8 +328,10 @@ final class SessionListViewModel {
         guard sessions.isEmpty, let modelContext else { return false }
 
         do {
-            let cachedSessions = try CacheStore.cachedSessions(serverURL: server, in: modelContext)
-                .filter(\.shouldAppearInSessionList)
+            let cachedSessions = sessionsAfterOptimisticDeletions(
+                try CacheStore.cachedSessions(serverURL: server, in: modelContext)
+                    .filter(\.shouldAppearInSessionList)
+            )
             guard !cachedSessions.isEmpty else { return false }
             sessionsBeforeCacheFirstPlaceholder = sessions
             let placeholder = Self.sortedSessions(cachedSessions)
@@ -575,6 +607,11 @@ final class SessionListViewModel {
         modelContext: ModelContext? = nil,
         animation: Animation? = nil
     ) async -> Bool {
+        guard !isViewingCachedData else {
+            actionErrorMessage = String(localized: "Reconnect to the server to delete a session.")
+            return false
+        }
+
         guard let sessionId = Self.nonEmpty(session.sessionId) else {
             actionErrorMessage = String(localized: "The server did not provide a session ID.")
             return false
@@ -583,8 +620,57 @@ final class SessionListViewModel {
         guard beginSessionMutation(sessionId) else { return false }
         defer { endSessionMutation(sessionId) }
 
-        return await mutate(modelContext: modelContext, animation: animation) {
-            try await sessionMutator.delete(sessionID: sessionId)
+        actionErrorMessage = nil
+        lastError = nil
+        let pendingDeletion = PendingSessionDeletion(
+            sessionsBeforeDeletion: sessions,
+            archivedCountBeforeDeletion: archivedCount,
+            successfulLoadGenerationAtStart: successfulLoadGeneration,
+            latestCanonicalSessions: nil,
+            latestCanonicalArchivedCount: nil
+        )
+        pendingSessionDeletions[sessionId] = pendingDeletion
+
+        // The destructive confirmation has already happened in the view. Remove
+        // the row before the network round trip so the list responds immediately.
+        applySessions(
+            sessions.filter { Self.nonEmpty($0.sessionId) != sessionId },
+            archivedCount: archivedCount,
+            animation: animation
+        )
+        if let modelContext {
+            do {
+                try CacheStore.deleteSession(sessionID: sessionId, serverURL: server, in: modelContext)
+            } catch {
+                cacheErrorMessage = error.localizedDescription
+            }
+        }
+
+        do {
+            let response = try await sessionMutator.delete(sessionID: sessionId)
+            if response.ok == false {
+                throw SessionMutationRejectedError(
+                    message: Self.nonEmpty(response.error)
+                        ?? String(localized: "The server did not delete the session.")
+                )
+            }
+
+            // Keep the tombstone active while the follow-up list load runs so an
+            // eventually-consistent response cannot resurrect the acknowledged row.
+            confirmedSessionDeletionIDs.insert(sessionId)
+            _ = await load(modelContext: modelContext, animation: animation)
+            pendingSessionDeletions.removeValue(forKey: sessionId)
+            actionErrorMessage = nil
+            lastError = nil
+            return true
+        } catch {
+            let wasCancelled = isCancellationError(error)
+            rollbackPendingSessionDeletion(sessionId, modelContext: modelContext, animation: animation)
+            guard !wasCancelled else { return false }
+
+            lastError = error
+            actionErrorMessage = error.localizedDescription
+            return false
         }
     }
 
@@ -1049,6 +1135,15 @@ final class SessionListViewModel {
         .joined(separator: " ")
     }
 
+    private func sessionsAfterOptimisticDeletions(_ candidates: [SessionSummary]) -> [SessionSummary] {
+        let hiddenSessionIDs = Set(pendingSessionDeletions.keys).union(confirmedSessionDeletionIDs)
+        guard !hiddenSessionIDs.isEmpty else { return candidates }
+        return candidates.filter { session in
+            guard let sessionID = Self.nonEmpty(session.sessionId) else { return true }
+            return !hiddenSessionIDs.contains(sessionID)
+        }
+    }
+
     /// `archivedCount` is applied inside the same transaction as the rows so the
     /// bottom Archived entry inserts/removes with the list mutation animation.
     private func applySessions(
@@ -1105,6 +1200,51 @@ final class SessionListViewModel {
     private func duplicateTitle(for session: SessionSummary) -> String {
         let baseTitle = Self.nonEmpty(session.title) ?? String(localized: "Untitled Session")
         return String(localized: "\(baseTitle) (copy)")
+    }
+
+    private func rollbackPendingSessionDeletion(
+        _ sessionID: String,
+        modelContext: ModelContext?,
+        animation: Animation?
+    ) {
+        guard let pendingDeletion = pendingSessionDeletions.removeValue(forKey: sessionID) else { return }
+        confirmedSessionDeletionIDs.remove(sessionID)
+
+        // Prefer the newest canonical response observed while the delete was
+        // pending. It may contain a changed version of the row, and is the only
+        // safe source after a refresh advanced successfulLoadGeneration.
+        let canonicalSessions: [SessionSummary]
+        let canonicalArchivedCount: Int?
+        if let latestCanonicalSessions = pendingDeletion.latestCanonicalSessions {
+            canonicalSessions = latestCanonicalSessions
+            canonicalArchivedCount = pendingDeletion.latestCanonicalArchivedCount
+        } else {
+            // No refresh overlapped the mutation, so the exact pre-delete
+            // snapshot is still the correct rollback source.
+            guard successfulLoadGeneration <= pendingDeletion.successfulLoadGenerationAtStart else { return }
+            canonicalSessions = pendingDeletion.sessionsBeforeDeletion
+            canonicalArchivedCount = pendingDeletion.archivedCountBeforeDeletion
+        }
+
+        let hiddenSessionIDs = Set(pendingSessionDeletions.keys).union(confirmedSessionDeletionIDs)
+        let restoredSessions = canonicalSessions.filter { session in
+            guard let candidateID = Self.nonEmpty(session.sessionId) else { return true }
+            return !hiddenSessionIDs.contains(candidateID)
+        }
+        applySessions(
+            restoredSessions,
+            archivedCount: canonicalArchivedCount,
+            animation: animation
+        )
+
+        guard let restoredSession = canonicalSessions.first(where: {
+            Self.nonEmpty($0.sessionId) == sessionID
+        }), let modelContext else { return }
+        do {
+            try CacheStore.cacheSession(restoredSession, serverURL: server, in: modelContext)
+        } catch {
+            cacheErrorMessage = error.localizedDescription
+        }
     }
 
     private func beginSessionMutation(_ sessionId: String) -> Bool {

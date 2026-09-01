@@ -25,6 +25,7 @@ struct KeychainStore: KeychainStoring {
         // URL is treated as a credential (PROJECT_SPEC Phase 1), so the registry
         // lives in the Keychain, not UserDefaults (#15).
         case servers = "servers"
+        case officialAPIKey = "official_api_key"
     }
 
     private let keychain: Keychain

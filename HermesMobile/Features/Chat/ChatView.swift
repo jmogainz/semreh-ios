@@ -376,16 +376,19 @@ struct ChatView: View {
             )
         ))
         _initialAttachments = State(initialValue: initialAttachments)
-        _viewModel = State(initialValue: retainedViewModel ?? OpenChatSessionStore.shared.viewModel(
+        let openSessionStore = OpenChatSessionStore.shared
+        let resolvedRetainedViewModel = retainedViewModel ?? openSessionStore.viewModel(
             session: session,
             server: server,
             showsLiveActivityResponseExcerpts: UserDefaults.standard.bool(
                 forKey: AgentRunLiveActivityPrivacy.showsResponseExcerptsKey
             )
-        ))
-        _gitAvailabilityViewModel = State(initialValue: GitWorkspaceAvailabilityViewModel(
+        )
+        _viewModel = State(initialValue: resolvedRetainedViewModel)
+        _gitAvailabilityViewModel = State(initialValue: openSessionStore.gitAvailabilityViewModel(
             session: session,
-            server: server
+            server: server,
+            chatViewModel: resolvedRetainedViewModel
         ))
     }
 
@@ -1940,7 +1943,7 @@ struct ChatView: View {
         }
     }
 
-    private func pastedImageFilename(suggestedName: String? = nil) -> String {
+    nonisolated private func pastedImageFilename(suggestedName: String? = nil) -> String {
         if let suggestedName,
            !suggestedName.isEmpty,
            !URL(fileURLWithPath: suggestedName).pathExtension.isEmpty {
@@ -1950,7 +1953,7 @@ struct ChatView: View {
         return "image_\(Int(Date().timeIntervalSince1970))_\(UUID().uuidString.prefix(4)).jpg"
     }
 
-    private func pastedFileURL(from item: NSSecureCoding?) -> URL? {
+    nonisolated private func pastedFileURL(from item: NSSecureCoding?) -> URL? {
         if let url = item as? URL {
             return url
         }

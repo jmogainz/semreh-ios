@@ -177,6 +177,35 @@ final class SSEClientTests: XCTestCase {
         )
     }
 
+    func testOfficialWrapperMirrorsFallbackCursorForWebUIStream() async throws {
+        DelayedSSEURLProtocol.configure(chunks: [
+            DelayedSSEChunk(
+                text: "id: webui:42\nevent: token\ndata: {\"text\":\"hello\"}\n\n",
+                delayNanoseconds: 1_000_000
+            )
+        ])
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DelayedSSEURLProtocol.self]
+        let fallback = SSEClient(urlSessionConfiguration: configuration)
+        let wrapper = OfficialHermesStreamClient(
+            client: APIClient(baseURL: URL(string: "https://example.test")!),
+            fallback: fallback
+        )
+        let received = expectation(description: "fallback event received")
+
+        wrapper.start(url: URL(string: "https://example.test/api/chat/stream?stream_id=webui")!) { event in
+            if case .token = event {
+                received.fulfill()
+            }
+        }
+        XCTAssertNil(wrapper.lastEventID)
+
+        await fulfillment(of: [received], timeout: 1)
+
+        XCTAssertEqual(wrapper.lastEventID, "webui:42")
+        wrapper.stop()
+    }
+
     func testSSEClientForwardsHeartbeatComments() async {
         DelayedSSEURLProtocol.configure(chunks: [
             DelayedSSEChunk(text: ": heartbeat\n\n", delayNanoseconds: 0)

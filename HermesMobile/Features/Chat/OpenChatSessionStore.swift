@@ -8,13 +8,27 @@ final class OpenChatSessionStore {
     static let shared = OpenChatSessionStore()
     static let maxRetainedIdleSessionCount = 8
 
+    /// The store keeps a small warm set so ordinary back-and-forth navigation can
+    /// reuse transcripts, while repeated session opens cannot retain every chat for
+    /// the lifetime of the process. Active streams are never counted as evictable.
+    private let retentionPolicy: OpenChatSessionStoreRetentionPolicy
     private var viewModels: [OpenChatSessionKey: ChatViewModel] = [:]
+    private var gitAvailabilityViewModels: [OpenChatSessionKey: GitWorkspaceAvailabilityViewModel] = [:]
+    /// Oldest first. This is deliberately separate from the dictionary so eviction
+    /// remains deterministic instead of depending on dictionary iteration order.
     private var accessOrder: [OpenChatSessionKey] = []
+    /// One canonical refresh task per server. Foreground, pull-to-refresh, reopen,
+    /// and event hints may arrive together; they all await the same reconciliation
+    /// instead of issuing duplicate `/api/session` loads for every retained chat.
+    private var refreshTasks: [String: Task<Int, Never>] = [:]
+    private var deferredRetentionTrimTask: Task<Void, Never>?
     private(set) var liveOwnershipGeneration = 0
 
     var retainedSessionCountForTesting: Int { viewModels.count }
 
-    private init() {}
+    init(retentionPolicy: OpenChatSessionStoreRetentionPolicy = .production) {
+        self.retentionPolicy = retentionPolicy
+    }
 
     func viewModel(
         session: SessionSummary,
@@ -41,7 +55,38 @@ final class OpenChatSessionStore {
         )
         viewModels[key] = created
         touch(key)
-        pruneInactiveSessionsIfNeeded()
+        trimIdleViewModels(forServer: key.server)
+        return created
+    }
+
+    func gitAvailabilityViewModel(
+        session: SessionSummary,
+        server: URL,
+        chatViewModel: ChatViewModel
+    ) -> GitWorkspaceAvailabilityViewModel {
+        let key = OpenChatSessionKey(server: server, sessionID: Self.normalizedSessionID(session))
+        if let existing = gitAvailabilityViewModels[key] {
+            touch(key)
+            return existing
+        }
+
+        let retainedChatViewModel: ChatViewModel
+        if let existing = viewModels[key] {
+            retainedChatViewModel = existing
+        } else {
+            viewModels[key] = chatViewModel
+            touch(key)
+            retainedChatViewModel = chatViewModel
+        }
+
+        let created = GitWorkspaceAvailabilityViewModel(
+            session: session,
+            server: server,
+            apiClient: retainedChatViewModel.client
+        )
+        gitAvailabilityViewModels[key] = created
+        touch(key)
+        trimIdleViewModels(forServer: key.server)
         return created
     }
 
@@ -54,7 +99,6 @@ final class OpenChatSessionStore {
         let key = OpenChatSessionKey(server: server, sessionID: Self.normalizedSessionID(session))
         viewModels[key] = viewModel
         touch(key)
-        pruneInactiveSessionsIfNeeded()
         noteStreamingStateChanged()
         return viewModel
     }
@@ -92,6 +136,22 @@ final class OpenChatSessionStore {
             .sorted()
     }
 
+    #if DEBUG
+    /// Narrow test-only visibility into the retention boundary. Production callers
+    /// continue to use viewModel/liveSessionIDs rather than the retained collection.
+    func retainedSessionIDsForTesting(for server: URL) -> [String] {
+        let serverKey = OpenChatSessionKey.normalizedServer(server)
+        return accessOrder.compactMap { key in
+            guard key.server == serverKey, viewModels[key] != nil else { return nil }
+            return key.sessionID
+        }
+    }
+
+    func retainedViewModelCountForTesting(for server: URL) -> Int {
+        retainedSessionIDsForTesting(for: server).count
+    }
+    #endif
+
     /// Reconciles transcripts for sessions that are already retained by the chat
     /// navigation store. The sidebar list endpoint returns summaries only; without
     /// this explicit pass, a message sent from TUI/WebUI can leave a warm iOS
@@ -106,6 +166,26 @@ final class OpenChatSessionStore {
         modelContext: ModelContext? = nil
     ) async -> Int {
         let serverKey = OpenChatSessionKey.normalizedServer(server)
+        if let existingTask = refreshTasks[serverKey] {
+            return await existingTask.value
+        }
+
+        let task = Task { @MainActor [weak self] in
+            defer { self?.refreshTasks.removeValue(forKey: serverKey) }
+            guard let self else { return 0 }
+            return await self.refreshOpenSessionsUncoalesced(
+                for: serverKey,
+                modelContext: modelContext
+            )
+        }
+        refreshTasks[serverKey] = task
+        return await task.value
+    }
+
+    private func refreshOpenSessionsUncoalesced(
+        for serverKey: String,
+        modelContext: ModelContext?
+    ) async -> Int {
         let openViewModels = viewModels.compactMap { (key, viewModel) -> ChatViewModel? in
             guard key.server == serverKey, viewModel.hasServerBackedSession else { return nil }
             return viewModel
@@ -121,46 +201,92 @@ final class OpenChatSessionStore {
 
     func noteStreamingStateChanged() {
         liveOwnershipGeneration &+= 1
-        pruneInactiveSessionsIfNeeded()
+        // Most callers notify while a stream is finalizing, before the model clears
+        // activeStreamID. Trim now for ordinary changes and once more on the next
+        // main-actor turn so active-to-idle transitions are handled safely.
+        trimIdleViewModels()
+        deferredRetentionTrimTask?.cancel()
+        deferredRetentionTrimTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard !Task.isCancelled, let self else { return }
+            self.deferredRetentionTrimTask = nil
+            self.trimIdleViewModels()
+        }
     }
 
     func resetForTesting() {
+        deferredRetentionTrimTask?.cancel()
+        deferredRetentionTrimTask = nil
+        refreshTasks.values.forEach { $0.cancel() }
+        refreshTasks.removeAll()
         viewModels.values.forEach { $0.stopSessionEventSync() }
+        gitAvailabilityViewModels.removeAll()
         viewModels.removeAll()
         accessOrder.removeAll()
         liveOwnershipGeneration = 0
     }
 
     private func touch(_ key: OpenChatSessionKey) {
-        accessOrder.removeAll(where: { $0 == key })
+        accessOrder.removeAll { $0 == key }
         accessOrder.append(key)
     }
 
-    /// Keep warm reopen fast for recent conversations without retaining every
-    /// large transcript visited during the process lifetime. Running sessions
-    /// are never evicted; only the least-recent inactive models are bounded.
-    private func pruneInactiveSessionsIfNeeded() {
-        let idleKeys = accessOrder.filter { key in
-            viewModels[key]?.activeStreamID == nil
+    private func trimIdleViewModels(forServer serverKey: String? = nil) {
+        let servers: [String]
+        if let serverKey {
+            servers = [serverKey]
+        } else {
+            servers = Set(viewModels.keys.map(\.server)).sorted()
         }
-        let excess = idleKeys.count - Self.maxRetainedIdleSessionCount
-        guard excess > 0 else { return }
 
-        for key in idleKeys.prefix(excess) {
-            guard let viewModel = viewModels.removeValue(forKey: key) else { continue }
-            viewModel.setTranscriptPresentationActive(false)
-            viewModel.stopSessionEventSync()
-            viewModel.cancelOwnedStreamStatusWatch()
-            accessOrder.removeAll(where: { $0 == key })
+        for server in servers {
+            var idleCount = viewModels.reduce(into: 0) { count, entry in
+                guard entry.key.server == server, entry.value.activeStreamID == nil else { return }
+                count += 1
+            }
+            guard idleCount > retentionPolicy.maxIdleViewModelsPerServer else { continue }
+
+            // Iterate over a snapshot because eviction removes keys from the live
+            // access-order array. Active entries are skipped, allowing idle entries
+            // behind them to be evicted without ever disturbing a live run.
+            let orderedKeys = accessOrder
+            for key in orderedKeys where key.server == server {
+                guard idleCount > retentionPolicy.maxIdleViewModelsPerServer else { break }
+                guard let viewModel = viewModels[key], viewModel.activeStreamID == nil else { continue }
+                evict(key: key, viewModel: viewModel)
+                idleCount -= 1
+            }
         }
     }
 
+    private func evict(key: OpenChatSessionKey, viewModel: ChatViewModel) {
+        // Stop owned work before dropping the store's strong reference. These APIs
+        // are also used by navigation/reset paths and avoid relying on deinit timing.
+        viewModel.stopSessionEventSync()
+        viewModel.cancelOwnedStreamStatusWatch()
+        viewModel.cleanupPollingTasks()
+        viewModels.removeValue(forKey: key)
+        gitAvailabilityViewModels.removeValue(forKey: key)
+        accessOrder.removeAll { $0 == key }
+    }
     private static func normalizedSessionID(_ session: SessionSummary) -> String {
         let raw = session.sessionId?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let raw, !raw.isEmpty {
             return raw
         }
         return session.id
+    }
+}
+
+struct OpenChatSessionStoreRetentionPolicy: Equatable {
+    /// Eight idle models preserve normal warm navigation while bounding the
+    /// transcript/client/task graph retained by a process that visits many chats.
+    static let production = Self(maxIdleViewModelsPerServer: OpenChatSessionStore.maxRetainedIdleSessionCount)
+
+    let maxIdleViewModelsPerServer: Int
+
+    init(maxIdleViewModelsPerServer: Int) {
+        self.maxIdleViewModelsPerServer = max(0, maxIdleViewModelsPerServer)
     }
 }
 
@@ -294,12 +420,19 @@ final class SessionEventStreamCoordinator {
             guard let self, self.generation == connectionGeneration else { return }
 
             if case let .sessionSnapshot(snapshot) = event {
-                guard Self.normalizedID(snapshot.sessionId ?? snapshot.id) == Self.normalizedID(self.sessionID) else {
+                guard Self.normalizedID(snapshot.sessionId ?? snapshot.id) == Self.normalizedID(self.sessionID),
+                      let onSnapshot = self.onSnapshot,
+                      onSnapshot(snapshot)
+                else {
+                    // A malformed, wrong-session, or rejected snapshot is not a
+                    // recovery boundary. Keep the durable cursor so the next
+                    // reconnect can retry the same authoritative state.
                     return
                 }
-                // A snapshot means the server could not honor the prior replay
-                // cursor. It is a recovery boundary: discard the stale cursor and
-                // all prior dedupe state before the next reconnect.
+
+                // A successfully applied snapshot means the server could not honor
+                // the prior replay cursor. It is a recovery boundary: discard the
+                // stale cursor and all prior dedupe state before the next reconnect.
                 self.cursorPersistTask?.cancel()
                 self.cursorPersistTask = nil
                 self.lastAcceptedEventID = nil
@@ -316,7 +449,9 @@ final class SessionEventStreamCoordinator {
                     profile: self.profile,
                     sessionID: self.sessionID
                 )
-                _ = self.onSnapshot?(snapshot)
+                // Reconnect without Last-Event-ID. A snapshot is the server's
+                // explicit signal that incremental replay is no longer safe.
+                self.scheduleReconnect(connectionGeneration: connectionGeneration)
             } else {
                 if case .transportError = event {
                     // Keep the attempt counter so an older Hermes server that
@@ -326,7 +461,8 @@ final class SessionEventStreamCoordinator {
                 } else {
                     self.reconnectAttempt = 0
                 }
-                if let eventID = Self.normalizedEventID(eventID) {
+                if Self.shouldAdvanceCursor(for: event),
+                   let eventID = Self.normalizedEventID(eventID) {
                     guard !self.seenEventIDs.contains(eventID) else { return }
                     self.lastAcceptedEventID = eventID
                     self.remember(eventID: eventID, persist: false)
@@ -383,6 +519,17 @@ final class SessionEventStreamCoordinator {
             return true
         default:
             return false
+        }
+    }
+
+    private static func shouldAdvanceCursor(for event: SSEEvent) -> Bool {
+        switch event {
+        case .ignored:
+            // The decoder could not establish a valid event payload. Advancing
+            // past its ID would make an authoritative replay permanently skip it.
+            return false
+        default:
+            return true
         }
     }
 
