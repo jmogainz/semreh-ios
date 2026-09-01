@@ -5717,6 +5717,9 @@ extension ChatViewModel: ChatStreamCoordinatorDelegate {
     var streamCoordinatorHasPendingPrompt: Bool {
         pendingActionCoordinator.hasPendingPrompt
     }
+    var streamCoordinatorHasNativeAuthLocalInputPrompt: Bool {
+        nativeAuthPrompt?.inputComponents.isEmpty == false
+    }
     var streamCoordinatorLatestServerLoadHadAssistantResponseAfterLatestUser: Bool {
         latestServerLoadHadAssistantResponseAfterLatestUser
     }

@@ -37,6 +37,7 @@ protocol ChatStreamCoordinatorDelegate: AnyObject {
     var streamCoordinatorDisplayTitle: String { get }
     var streamCoordinatorHasRunningLiveToolCall: Bool { get }
     var streamCoordinatorHasPendingPrompt: Bool { get }
+    var streamCoordinatorHasNativeAuthLocalInputPrompt: Bool { get }
     var streamCoordinatorLatestServerLoadHadAssistantResponseAfterLatestUser: Bool { get }
     var streamCoordinatorStreamingAssistantMessageID: String? { get set }
 
@@ -82,6 +83,7 @@ protocol ChatStreamCoordinatorDelegate: AnyObject {
 }
 
 extension ChatStreamCoordinatorDelegate {
+    var streamCoordinatorHasNativeAuthLocalInputPrompt: Bool { false }
     func streamCoordinatorApplyNativeAuthComponent(_ component: NativeAuthWireComponent) {}
     func streamCoordinatorApplyNativeAuthState(_ state: NativeAuthWireState) {}
 }
@@ -851,7 +853,9 @@ final class ChatStreamCoordinator {
         runGeneration &+= 1
         liveActivityManager.end(status: .complete, activity: String(localized: "Response complete"), errorSummary: nil)
         delegate?.streamCoordinatorRemoveSnapshot(streamID: activeStreamID)
-        delegate?.streamCoordinatorStopAuxiliaryMonitoring(clearPrompt: true)
+        delegate?.streamCoordinatorStopAuxiliaryMonitoring(
+            clearPrompt: delegate?.streamCoordinatorHasNativeAuthLocalInputPrompt != true
+        )
         activeStreamID = nil
         lastEventID = nil
         liveTokensPerSecond = nil
@@ -903,7 +907,9 @@ final class ChatStreamCoordinator {
         let completedNormally = hasCompletedCurrentResponse
         let finishedStreamID = activeStreamID
         streamClient.stop()
-        delegate?.streamCoordinatorStopAuxiliaryMonitoring(clearPrompt: true)
+        delegate?.streamCoordinatorStopAuxiliaryMonitoring(
+            clearPrompt: delegate?.streamCoordinatorHasNativeAuthLocalInputPrompt != true
+        )
         delegate?.streamCoordinatorFlushPinnedLocalNoticesToTranscript()
         delegate?.streamCoordinatorRemoveSnapshot(streamID: finishedStreamID)
         activeStreamID = nil

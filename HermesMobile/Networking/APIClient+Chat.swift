@@ -261,14 +261,14 @@ extension APIClient {
             throw APIError.unauthorized
         }
         if !(200..<300).contains(httpResponse.statusCode) {
-            if let outcome = try? decode(NativeAuthControlResponse.self, from: data),
+            if let outcome = try? decodeNativeAuthControlResponse(from: data),
                outcome.expectedHTTPStatus == httpResponse.statusCode,
                !outcome.ok {
                 throw NativeAuthControlError(outcome: outcome, statusCode: httpResponse.statusCode)
             }
             throw APIError.http(statusCode: httpResponse.statusCode, body: String(data: data, encoding: .utf8))
         }
-        let outcome = try decode(NativeAuthControlResponse.self, from: data)
+        let outcome = try decodeNativeAuthControlResponse(from: data)
         guard outcome.ok,
               outcome.expectedHTTPStatus == httpResponse.statusCode,
               outcome.state == expectedSuccessState
@@ -276,6 +276,18 @@ extension APIClient {
             throw APIError.decoding(underlying: WebsiteLoginSecurityError.invalidPolicy)
         }
         return outcome
+    }
+
+    private func decodeNativeAuthControlResponse(from data: Data) throws -> NativeAuthControlResponse {
+        // Native-auth response decoding is deliberately closed over the exact
+        // metadata-only wire keys. The client-wide decoder's snake-case strategy
+        // would transform those keys before NativeAuthControlResponse can reject
+        // unknown or credential-bearing fields.
+        do {
+            return try JSONDecoder().decode(NativeAuthControlResponse.self, from: data)
+        } catch {
+            throw APIError.decoding(underlying: error)
+        }
     }
 }
 
