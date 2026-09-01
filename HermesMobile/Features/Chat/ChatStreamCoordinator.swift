@@ -74,8 +74,16 @@ protocol ChatStreamCoordinatorDelegate: AnyObject {
     func streamCoordinatorApplyDone(_ payload: DoneStreamEvent) -> Bool
     func streamCoordinatorApplyApprovalUpdate(_ update: ApprovalPendingResponse)
     func streamCoordinatorApplyClarificationUpdate(_ update: ClarificationPendingResponse)
+    func streamCoordinatorApplyNativeAuthComponent(_ component: NativeAuthWireComponent)
+    func streamCoordinatorApplyNativeAuthState(_ state: NativeAuthWireState)
+    func streamCoordinatorApplyWebsiteLogin(_ request: WebsiteLoginRequest)
     @discardableResult
     func streamCoordinatorEnqueuePendingSteerLeftover(_ text: String) -> Bool
+}
+
+extension ChatStreamCoordinatorDelegate {
+    func streamCoordinatorApplyNativeAuthComponent(_ component: NativeAuthWireComponent) {}
+    func streamCoordinatorApplyNativeAuthState(_ state: NativeAuthWireState) {}
 }
 
 @MainActor
@@ -666,6 +674,15 @@ final class ChatStreamCoordinator {
         case .clarificationPending(let update):
             liveActivityManager.update(.waitingForClarification)
             delegate?.streamCoordinatorApplyClarificationUpdate(update)
+            markProgress()
+        case .websiteLoginPending(let request):
+            delegate?.streamCoordinatorApplyWebsiteLogin(request)
+            markProgress()
+        case .nativeComponent(let component):
+            delegate?.streamCoordinatorApplyNativeAuthComponent(component)
+            markProgress()
+        case .nativeComponentState(let state):
+            delegate?.streamCoordinatorApplyNativeAuthState(state)
             markProgress()
         case .pendingSteerLeftover(let text):
             if delegate?.streamCoordinatorEnqueuePendingSteerLeftover(text) == true {

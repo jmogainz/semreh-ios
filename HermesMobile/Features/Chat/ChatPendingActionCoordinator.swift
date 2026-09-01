@@ -283,8 +283,8 @@ final class ChatPendingActionCoordinator {
             applyApprovalUpdate(update, sessionID: sessionID)
         case .transportError, .error, .lostWorkerBookkeeping:
             startApprovalFallbackPolling(sessionID: sessionID)
-        case .token, .interimAssistant, .reasoning, .toolStarted, .toolCompleted, .title, .sessionSnapshot, .metering, .done, .clarificationPending,
-             .pendingSteerLeftover, .streamEnd, .cancelled, .heartbeat, .ignored:
+        case .token, .interimAssistant, .reasoning, .toolStarted, .toolCompleted, .title, .sessionSnapshot, .metering, .done, .clarificationPending, .websiteLoginPending,
+             .pendingSteerLeftover, .streamEnd, .cancelled, .heartbeat, .ignored, .nativeComponent, .nativeComponentState:
             break
         }
     }
@@ -389,8 +389,8 @@ final class ChatPendingActionCoordinator {
             }
         case .transportError, .error, .lostWorkerBookkeeping:
             startClarificationFallbackPolling(sessionID: sessionID)
-        case .token, .interimAssistant, .reasoning, .toolStarted, .toolCompleted, .title, .sessionSnapshot, .metering, .done,
-             .pendingSteerLeftover, .streamEnd, .cancelled, .heartbeat, .ignored:
+        case .token, .interimAssistant, .reasoning, .toolStarted, .toolCompleted, .title, .sessionSnapshot, .metering, .done, .websiteLoginPending,
+             .pendingSteerLeftover, .streamEnd, .cancelled, .heartbeat, .ignored, .nativeComponent, .nativeComponentState:
             break
         }
     }

@@ -288,6 +288,7 @@ final class CustomHeaderSSEInjectionTests: XCTestCase {
         configuration.protocolClasses = [MockURLProtocol.self]
         let client = SSEClient(
             urlSessionConfiguration: configuration,
+            allowedServerURL: URL(string: "https://example.test")!,
             customHeaderProvider: {
                 [
                     CustomHeader(name: "Authorization", value: "Bearer sse"),
@@ -325,7 +326,10 @@ final class CustomHeaderSSEInjectionTests: XCTestCase {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [MockURLProtocol.self]
         // No explicit provider → uses the default active-server store.
-        let client = SSEClient(urlSessionConfiguration: configuration)
+        let client = SSEClient(
+            urlSessionConfiguration: configuration,
+            allowedServerURL: URL(string: "https://a.test")!
+        )
 
         client.start(url: URL(string: "https://a.test/api/chat/stream?stream_id=s1")!) { _ in }
         await fulfillment(of: [captured], timeout: 2)

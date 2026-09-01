@@ -43,6 +43,7 @@ extension SSEStreamingClient {
 @MainActor
 final class SSEClient: SSEStreamingClient {
     private let baseConfiguration: URLSessionConfiguration
+    private let allowedServerURL: URL?
     private var eventSource: EventSource?
     private var activeConnectionID: UUID?
     private(set) var lastEventID: String?
@@ -51,9 +52,11 @@ final class SSEClient: SSEStreamingClient {
 
     init(
         urlSessionConfiguration: URLSessionConfiguration = .default,
+        allowedServerURL: URL? = nil,
         customHeaderProvider: @escaping @MainActor () -> [CustomHeader] = { CustomHeaderStore.shared.snapshot() }
     ) {
         baseConfiguration = urlSessionConfiguration
+        self.allowedServerURL = allowedServerURL
         self.customHeaderProvider = customHeaderProvider
     }
 
@@ -77,6 +80,11 @@ final class SSEClient: SSEStreamingClient {
         onEventWithID: @escaping @MainActor (SSEEvent, String?) -> Void
     ) {
         stop()
+        guard Self.isApprovedStreamURL(url, serverURL: allowedServerURL) else {
+            onEventWithID(.transportError("The stream URL is not approved."), nil)
+            return
+        }
+
         let normalizedResumeID = Self.normalizedEventID(eventID)
         lastEventID = normalizedResumeID
         let connectionID = UUID()
@@ -110,6 +118,21 @@ final class SSEClient: SSEStreamingClient {
         let source = EventSource(config: config)
         eventSource = source
         source.start()
+    }
+
+    static func isApprovedStreamURL(_ url: URL, serverURL: URL?) -> Bool {
+        guard let serverURL,
+              url.user == nil,
+              url.password == nil,
+              serverURL.user == nil,
+              serverURL.password == nil,
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https"
+        else {
+            return false
+        }
+
+        return APIClient.isSameOrigin(url, as: serverURL)
     }
 
     static func requestHeaders(
@@ -157,6 +180,9 @@ enum SSEEvent: Equatable {
     case done(DoneStreamEvent)
     case approvalPending(ApprovalPendingResponse)
     case clarificationPending(ClarificationPendingResponse)
+    case nativeComponent(NativeAuthWireComponent)
+    case nativeComponentState(NativeAuthWireState)
+    case websiteLoginPending(WebsiteLoginRequest)
     case pendingSteerLeftover(String)
     case streamEnd
     case cancelled
@@ -376,6 +402,30 @@ struct SSEEventDecoder {
         case "clarify":
             logInvalidJSONIfNeeded(eventType: eventType, payloadName: "clarification stream payload", data: eventData)
             return .clarificationPending(ClarificationPendingResponse.streamPayload(from: eventData, decoder: decoder))
+        case "native_component":
+            do {
+                return .nativeComponent(try decoder.decode(NativeAuthWireComponent.self, from: eventData))
+            } catch {
+                logger.error("Rejected malformed native component event")
+                return .ignored
+            }
+        case "native_component_state":
+            do {
+                return .nativeComponentState(try decoder.decode(NativeAuthWireState.self, from: eventData))
+            } catch {
+                logger.error("Rejected malformed native component state event")
+                return .ignored
+            }
+        case "website_login":
+            // Do not use decodePayload here: its diagnostics include a
+            // truncated raw payload, which is unsafe if a compromised server
+            // ever sends an unexpected credential-shaped field.
+            do {
+                return .websiteLoginPending(try decoder.decode(WebsiteLoginRequest.self, from: eventData))
+            } catch {
+                logger.error("Rejected malformed website-login event")
+                return .ignored
+            }
         case "pending_steer_leftover":
             let payload = decodePayload(
                 PendingSteerLeftoverPayload.self,

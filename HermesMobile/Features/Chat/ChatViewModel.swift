@@ -173,6 +173,51 @@ struct ClarificationPromptState: Equatable, Identifiable {
     }
 }
 
+struct NativeAuthPromptState: Equatable, Identifiable {
+    let contextID: String
+    let ownerSessionID: String
+    let streamID: String
+    var components: [NativeAuthWireComponent]
+    var state: NativeAuthWireState?
+
+    var id: String { contextID }
+
+    var inputComponents: [NativeAuthWireComponent] {
+        components.filter { [.identifier, .secret, .oneTimeCode, .recoveryCode].contains($0.kind) }
+    }
+
+    var submitComponent: NativeAuthWireComponent? {
+        components.first { $0.kind == .submit }
+    }
+}
+
+private struct PendingNativeAuthSubmission: Equatable {
+    let ownerSessionID: String
+    let streamID: String
+    let contextID: String
+    let component: NativeAuthWireComponent
+    let actionHandle: String
+    let envelope: NativeAuthWireEnvelope
+}
+
+private extension NativeAuthWireStatus {
+    var nativeAuthOrder: Int {
+        switch self {
+        case .available: 0
+        case .focused: 1
+        case .awaitingBrowser: 2
+        case .completed, .cancelled, .blocked, .unavailable: 3
+        }
+    }
+
+    var isTerminalNativeAuthStatus: Bool {
+        switch self {
+        case .completed, .cancelled, .blocked, .unavailable: true
+        case .available, .focused, .awaitingBrowser: false
+        }
+    }
+}
+
 struct ProfileSwitchOutcome: Equatable {
     let session: SessionSummary?
 }
@@ -562,6 +607,32 @@ final class ChatViewModel {
     var clarificationPrompt: ClarificationPromptState? { pendingActionCoordinator.clarificationPrompt }
     var isRespondingToClarification: Bool { pendingActionCoordinator.isRespondingToClarification }
     var clarificationErrorMessage: String? { pendingActionCoordinator.clarificationErrorMessage }
+    private(set) var nativeAuthPrompt: NativeAuthPromptState?
+    private(set) var nativeAuthErrorMessage: String?
+    private var quarantinedNativeAuthContextIDs = Set<String>()
+    private var quarantinedNativeAuthStreamIDs = Set<String>()
+    private var nativeAuthStateOrderByContextID: [String: Int] = [:]
+    private var bufferedNativeAuthStates: [
+        String: (streamID: String, state: NativeAuthWireState)
+    ] = [:]
+    private var pendingNativeAuthSubmission: PendingNativeAuthSubmission?
+    private var nativeAuthRequestGeneration = 0
+    private var isNativeAuthRequestInFlight = false
+    #if DEBUG
+    private var nativeAuthE2EAutoSubmitController: NativeAuthE2EAutoSubmitController?
+    var hasPendingNativeAuthSubmissionForTesting: Bool {
+        pendingNativeAuthSubmission != nil
+    }
+    #endif
+    var nativeAuthCanRetrySubmission: Bool {
+        guard let prompt = nativeAuthPrompt, let pendingNativeAuthSubmission else { return false }
+        return pendingNativeAuthSubmission.ownerSessionID == prompt.ownerSessionID
+            && pendingNativeAuthSubmission.streamID == prompt.streamID
+            && pendingNativeAuthSubmission.contextID == prompt.contextID
+    }
+    private(set) var websiteLoginPrompt: WebsiteLoginRequest?
+    private(set) var websiteLoginErrorMessage: String?
+    private var resolvedWebsiteLoginRequestIDs = Set<String>()
     private(set) var currentGoal: SubmittedGoal?
     private(set) var isSubmittingGoal = false
     private(set) var goalErrorMessage: String?
@@ -690,8 +761,16 @@ final class ChatViewModel {
         sessionReasoningEffort = Self.nonEmpty(session.reasoningEffort)
         isCLISession = session.isCliSession == true
         self.server = server
+        #if DEBUG
+        self.nativeAuthE2EAutoSubmitController = NativeAuthE2EAutoSubmitController.processController(
+            serverURL: server
+        )
+        #endif
         let resolvedClient = client ?? APIClient(baseURL: server)
-        let resolvedStreamClient = streamClient ?? OfficialHermesStreamClient(client: resolvedClient)
+        let resolvedStreamClient = streamClient ?? OfficialHermesStreamClient(
+            client: resolvedClient,
+            serverURL: server
+        )
         let resolvedLiveActivityManager = liveActivityManager ?? AgentLiveActivityManager.shared
         self.client = resolvedClient
         self.streamCoordinator = ChatStreamCoordinator(
@@ -702,17 +781,17 @@ final class ChatViewModel {
         )
         self.pendingActionCoordinator = ChatPendingActionCoordinator(
             client: resolvedClient,
-            approvalStreamClient: approvalStreamClient ?? SSEClient(),
-            clarifyStreamClient: clarifyStreamClient ?? SSEClient(),
+            approvalStreamClient: approvalStreamClient ?? SSEClient(allowedServerURL: server),
+            clarifyStreamClient: clarifyStreamClient ?? SSEClient(allowedServerURL: server),
             pollingIntervals: pollingIntervals
         )
         self.attachmentCoordinator = ChatAttachmentCoordinator(client: resolvedClient)
-        self.btwStreamClient = btwStreamClient ?? SSEClient()
+        self.btwStreamClient = btwStreamClient ?? SSEClient(allowedServerURL: server)
         self.sessionEventStreamCoordinator = SessionEventStreamCoordinator(
             server: server,
             sessionID: session.sessionId ?? "",
             profile: session.profile,
-            streamClient: sessionEventStreamClient ?? SSEClient(),
+            streamClient: sessionEventStreamClient ?? SSEClient(allowedServerURL: server),
             userDefaults: userDefaults
         )
         self.liveActivityManager = resolvedLiveActivityManager
@@ -4482,6 +4561,51 @@ final class ChatViewModel {
         pendingActionCoordinator.applyClarificationUpdate(update, sessionID: sessionID)
     }
 
+    @discardableResult
+    func completeWebsiteLogin(requestID: String) async -> Bool {
+        await finishWebsiteLogin(requestID: requestID, result: .completed)
+    }
+
+    @discardableResult
+    func cancelWebsiteLogin(requestID: String) async -> Bool {
+        await finishWebsiteLogin(requestID: requestID, result: .cancelled)
+    }
+
+    @discardableResult
+    func failWebsiteLogin(requestID: String) async -> Bool {
+        await finishWebsiteLogin(requestID: requestID, result: .failed)
+    }
+
+    private func finishWebsiteLogin(requestID: String, result: WebsiteLoginResult) async -> Bool {
+        guard let sessionID,
+              let prompt = websiteLoginPrompt,
+              prompt.requestID == requestID,
+              !requestID.isEmpty
+        else {
+            websiteLoginErrorMessage = String(localized: "This website login request is no longer active.")
+            return false
+        }
+
+        websiteLoginErrorMessage = nil
+        do {
+            let response = try await client.finishWebsiteLogin(
+                requestID: requestID,
+                sessionID: sessionID,
+                result: result
+            )
+            guard response.requestID == requestID, response.result == result else {
+                websiteLoginErrorMessage = String(localized: "The website login response was not accepted.")
+                return false
+            }
+            resolvedWebsiteLoginRequestIDs.insert(requestID)
+            websiteLoginPrompt = nil
+            return true
+        } catch {
+            websiteLoginErrorMessage = String(localized: "Could not send the website login result. Try again.")
+            return false
+        }
+    }
+
     private func startBtwStream(streamID: String, question: String) {
         activeBtwStreamID = streamID
         activeBtwQuestion = question
@@ -4510,7 +4634,7 @@ final class ChatViewModel {
             updateActiveBtwMessage(isLoading: true)
         case .done:
             updateActiveBtwMessage(isLoading: false)
-        case .approvalPending, .clarificationPending:
+        case .approvalPending, .clarificationPending, .websiteLoginPending, .nativeComponent, .nativeComponentState:
             break
         case .streamEnd, .cancelled:
             finishBtwStream()
@@ -5661,6 +5785,10 @@ extension ChatViewModel: ChatStreamCoordinatorDelegate {
     func streamCoordinatorDidFinishStream() {
         flushPendingStreamingContent()
         responseCompletionNeedsTranscriptRefresh = false
+        // Native auth is a user-owned continuation that can outlive the model
+        // response. Its browser-issued component remains valid until the native
+        // submit/cancel/expiry state arrives; clearing it here makes the secure
+        // overlay disappear at the exact point the user needs to enter values.
     }
 
     func streamCoordinatorDidReceiveErrorMessage(_ message: String) {
@@ -5779,6 +5907,399 @@ extension ChatViewModel: ChatStreamCoordinatorDelegate {
     func streamCoordinatorApplyClarificationUpdate(_ update: ClarificationPendingResponse) {
         guard let sessionID else { return }
         applyClarificationUpdate(update, sessionID: sessionID)
+    }
+
+    func streamCoordinatorApplyNativeAuthComponent(_ component: NativeAuthWireComponent) {
+        guard let sessionID, let activeStreamID else { return }
+        guard !quarantinedNativeAuthContextIDs.contains(component.contextID),
+              !quarantinedNativeAuthStreamIDs.contains(activeStreamID)
+        else { return }
+
+        if var prompt = nativeAuthPrompt {
+            guard prompt.contextID == component.contextID else {
+                quarantineNativeAuth(
+                    contextIDs: [prompt.contextID, component.contextID],
+                    streamID: prompt.streamID,
+                    message: String(localized: "The browser sent conflicting authentication requests. Start the browser action again.")
+                )
+                return
+            }
+            guard nativeAuthComponent(component, matches: prompt) else {
+                quarantineNativeAuth(
+                    contextIDs: [component.contextID],
+                    streamID: prompt.streamID,
+                    message: String(localized: "The browser changed this authentication request. Start the browser action again.")
+                )
+                return
+            }
+            if let existing = prompt.components.first(where: { $0.componentID == component.componentID }) {
+                guard existing == component else {
+                    quarantineNativeAuth(
+                        contextIDs: [component.contextID],
+                        streamID: prompt.streamID,
+                        message: String(localized: "The browser changed this authentication request. Start the browser action again.")
+                    )
+                    return
+                }
+                applyBufferedNativeAuthStateIfPossible(contextID: component.contextID)
+                return
+            }
+            guard !prompt.components.contains(where: {
+                $0.field == component.field || $0.actionHandle == component.actionHandle
+            }) else {
+                quarantineNativeAuth(
+                    contextIDs: [component.contextID],
+                    streamID: prompt.streamID,
+                    message: String(localized: "The browser sent conflicting authentication components. Start the browser action again.")
+                )
+                return
+            }
+            prompt.components.append(component)
+            nativeAuthPrompt = prompt
+            nativeAuthRequestGeneration &+= 1
+            nativeAuthErrorMessage = nil
+            applyBufferedNativeAuthStateIfPossible(contextID: component.contextID)
+            scheduleNativeAuthE2EAutoSubmitIfEligible()
+            return
+        }
+
+        nativeAuthPrompt = NativeAuthPromptState(
+            contextID: component.contextID,
+            ownerSessionID: sessionID,
+            streamID: activeStreamID,
+            components: [component],
+            state: nil
+        )
+        nativeAuthRequestGeneration &+= 1
+        nativeAuthErrorMessage = nil
+        applyBufferedNativeAuthStateIfPossible(contextID: component.contextID)
+        scheduleNativeAuthE2EAutoSubmitIfEligible()
+    }
+
+    func streamCoordinatorApplyNativeAuthState(_ state: NativeAuthWireState) {
+        guard sessionID != nil, let activeStreamID else { return }
+        if state.status.isTerminalNativeAuthStatus {
+            bufferedNativeAuthStates[state.contextID] = nil
+            quarantinedNativeAuthContextIDs.insert(state.contextID)
+            if nativeAuthPrompt?.contextID == state.contextID {
+                nativeAuthPrompt = nil
+                pendingNativeAuthSubmission = nil
+                nativeAuthRequestGeneration &+= 1
+            }
+            return
+        }
+        guard !quarantinedNativeAuthContextIDs.contains(state.contextID) else { return }
+        guard var prompt = nativeAuthPrompt else {
+            bufferNativeAuthState(state, streamID: activeStreamID)
+            return
+        }
+        guard prompt.contextID == state.contextID else { return }
+        guard nativeAuthState(state, matches: prompt) else {
+            if !prompt.components.contains(where: { $0.componentID == state.componentID }) {
+                bufferNativeAuthState(state, streamID: activeStreamID)
+            } else {
+                quarantineNativeAuth(
+                    contextIDs: [state.contextID],
+                    streamID: prompt.streamID,
+                    message: String(localized: "The browser sent conflicting authentication state. Start the browser action again.")
+                )
+            }
+            return
+        }
+        bufferedNativeAuthStates[state.contextID] = nil
+
+        let order = state.status.nativeAuthOrder
+        guard order >= (nativeAuthStateOrderByContextID[state.contextID] ?? -1) else { return }
+        if order == nativeAuthStateOrderByContextID[state.contextID], prompt.state != state {
+            quarantineNativeAuth(
+                contextIDs: [state.contextID],
+                streamID: prompt.streamID,
+                message: String(localized: "The browser sent conflicting authentication state. Start the browser action again.")
+            )
+            return
+        }
+        guard prompt.state != state else { return }
+        nativeAuthStateOrderByContextID[state.contextID] = order
+        prompt.state = state
+        nativeAuthPrompt = prompt
+        nativeAuthRequestGeneration &+= 1
+        nativeAuthErrorMessage = nil
+        scheduleNativeAuthE2EAutoSubmitIfEligible()
+    }
+
+    private func scheduleNativeAuthE2EAutoSubmitIfEligible() {
+        #if DEBUG
+        guard let controller = nativeAuthE2EAutoSubmitController else { return }
+        Task { @MainActor [weak self] in
+            guard let self, let prompt = self.nativeAuthPrompt else { return }
+            let contextID = prompt.contextID
+            let attempted = await controller.submitIfEligible(prompt: prompt) { [weak self] values, component, actionHandle in
+                guard let self else { return false }
+                return await self.submitNativeAuth(
+                    values: values,
+                    component: component,
+                    actionHandle: actionHandle
+                )
+            }
+            guard attempted, self.nativeAuthPrompt?.contextID == contextID else { return }
+            // Auto-submit is intentionally never retryable. Success already
+            // terminalized through the production path; an ambiguous/failing
+            // result is also closed here so no envelope or retry state remains.
+            self.terminalizeNativeAuth(contextID: contextID)
+        }
+        #endif
+    }
+
+    #if DEBUG
+    func setNativeAuthE2EAutoSubmitControllerForTesting(_ controller: NativeAuthE2EAutoSubmitController?) {
+        nativeAuthE2EAutoSubmitController = controller
+    }
+    #endif
+
+    @discardableResult
+    func submitNativeAuth(
+        values: [String: String],
+        component: NativeAuthWireComponent,
+        actionHandle: String
+    ) async -> Bool {
+        guard let sessionID, let prompt = nativeAuthPrompt,
+              prompt.ownerSessionID == sessionID,
+              prompt.components.contains(component),
+              component.kind == .submit,
+              component.actionHandle == actionHandle,
+              !component.isExpired,
+              !isNativeAuthRequestInFlight
+        else {
+            nativeAuthErrorMessage = String(localized: "This authentication request is no longer active.")
+            return false
+        }
+
+        let pending: PendingNativeAuthSubmission
+        if let existing = pendingNativeAuthSubmission {
+            guard existing.ownerSessionID == sessionID,
+                  existing.streamID == prompt.streamID,
+                  existing.contextID == prompt.contextID,
+                  existing.component == component,
+                  existing.actionHandle == actionHandle
+            else {
+                quarantineNativeAuth(
+                    contextIDs: [prompt.contextID],
+                    streamID: prompt.streamID,
+                    message: String(localized: "The authentication retry no longer matches the browser request.")
+                )
+                return false
+            }
+            pending = existing
+        } else {
+            let allowedFields = Set(prompt.inputComponents.map(\.field))
+            guard !values.isEmpty,
+                  Set(values.keys).isSubset(of: allowedFields),
+                  values.values.allSatisfy({ !$0.isEmpty })
+            else {
+                nativeAuthErrorMessage = String(localized: "Enter the requested information before continuing.")
+                return false
+            }
+            do {
+                pending = PendingNativeAuthSubmission(
+                    ownerSessionID: sessionID,
+                    streamID: prompt.streamID,
+                    contextID: prompt.contextID,
+                    component: component,
+                    actionHandle: actionHandle,
+                    envelope: try NativeAuthWireEnvelope.encrypt(
+                        component: component,
+                        values: values,
+                        actionHandle: actionHandle
+                    )
+                )
+                pendingNativeAuthSubmission = pending
+            } catch {
+                nativeAuthErrorMessage = String(localized: "Could not prepare the secure authentication request.")
+                return false
+            }
+        }
+
+        let requestGeneration = nativeAuthRequestGeneration
+        isNativeAuthRequestInFlight = true
+        defer { isNativeAuthRequestInFlight = false }
+        do {
+            _ = try await client.submitNativeAuth(
+                sessionID: pending.ownerSessionID,
+                streamID: pending.streamID,
+                envelope: pending.envelope
+            )
+            guard nativeAuthRequestGeneration == requestGeneration,
+                  pendingNativeAuthSubmission == pending,
+                  nativeAuthPrompt?.contextID == pending.contextID
+            else { return false }
+            terminalizeNativeAuth(contextID: pending.contextID)
+            return true
+        } catch let error as NativeAuthControlError {
+            guard nativeAuthRequestGeneration == requestGeneration,
+                  pendingNativeAuthSubmission == pending
+            else { return false }
+            if error.outcome.retryable {
+                nativeAuthErrorMessage = String(localized: "The browser is busy. Retry the same secure request.")
+            } else {
+                quarantineNativeAuth(
+                    contextIDs: [pending.contextID],
+                    streamID: pending.streamID,
+                    message: String(localized: "The browser rejected this authentication request. Start the browser action again.")
+                )
+            }
+            return false
+        } catch {
+            guard nativeAuthRequestGeneration == requestGeneration,
+                  pendingNativeAuthSubmission == pending
+            else { return false }
+            nativeAuthErrorMessage = String(localized: "The result is unknown. Retry sends the same secure request.")
+            return false
+        }
+    }
+
+    @discardableResult
+    func cancelNativeAuth() async -> Bool {
+        guard let sessionID, let prompt = nativeAuthPrompt,
+              prompt.ownerSessionID == sessionID,
+              !isNativeAuthRequestInFlight
+        else { return false }
+        let requestGeneration = nativeAuthRequestGeneration
+        isNativeAuthRequestInFlight = true
+        defer { isNativeAuthRequestInFlight = false }
+        do {
+            _ = try await client.cancelNativeAuth(
+                sessionID: prompt.ownerSessionID,
+                streamID: prompt.streamID,
+                contextID: prompt.contextID
+            )
+            guard nativeAuthRequestGeneration == requestGeneration,
+                  nativeAuthPrompt?.contextID == prompt.contextID
+            else { return false }
+            terminalizeNativeAuth(contextID: prompt.contextID)
+            return true
+        } catch let error as NativeAuthControlError {
+            guard nativeAuthRequestGeneration == requestGeneration else { return false }
+            if error.outcome.retryable {
+                nativeAuthErrorMessage = String(localized: "The browser is busy. Try cancelling again.")
+            } else {
+                quarantineNativeAuth(
+                    contextIDs: [prompt.contextID],
+                    streamID: prompt.streamID,
+                    message: String(localized: "The browser no longer accepts this authentication request.")
+                )
+            }
+            return false
+        } catch {
+            guard nativeAuthRequestGeneration == requestGeneration else { return false }
+            nativeAuthErrorMessage = String(localized: "Could not confirm cancellation. Try again.")
+            return false
+        }
+    }
+
+    private func nativeAuthComponent(
+        _ component: NativeAuthWireComponent,
+        matches prompt: NativeAuthPromptState
+    ) -> Bool {
+        guard prompt.ownerSessionID == sessionID,
+              prompt.streamID == activeStreamID,
+              let anchor = prompt.components.first
+        else { return false }
+        let bindingMatches: Bool
+        switch (component.binding, anchor.binding) {
+        case (nil, nil):
+            bindingMatches = true
+        case let (.some(componentBinding), .some(anchorBinding)):
+            bindingMatches = componentBinding.tabHandle == anchorBinding.tabHandle
+                && componentBinding.frameHandle == anchorBinding.frameHandle
+                && componentBinding.documentGeneration == anchorBinding.documentGeneration
+        default:
+            bindingMatches = false
+        }
+        return component.contextID == anchor.contextID
+            && component.browserSessionID == anchor.browserSessionID
+            && component.providerOrigin == anchor.providerOrigin
+            && component.path == anchor.path
+            && component.runtimePublicKey == anchor.runtimePublicKey
+            && component.keyID == anchor.keyID
+            && component.expiresAt == anchor.expiresAt
+            && bindingMatches
+    }
+
+    private func nativeAuthState(_ state: NativeAuthWireState, matches prompt: NativeAuthPromptState) -> Bool {
+        guard let anchor = prompt.components.first,
+              state.browserSessionID == anchor.browserSessionID,
+              state.providerOrigin == anchor.providerOrigin,
+              state.path == anchor.path
+        else { return false }
+        guard let component = prompt.components.first(where: { $0.componentID == state.componentID }) else {
+            return false
+        }
+        return component.actionHandle == state.actionHandle && component.kind == state.kind
+    }
+
+    private func bufferNativeAuthState(_ state: NativeAuthWireState, streamID: String) {
+        bufferedNativeAuthStates = bufferedNativeAuthStates.filter { $0.value.streamID == streamID }
+        if let existing = bufferedNativeAuthStates[state.contextID] {
+            guard existing.streamID == streamID, existing.state == state else {
+                quarantineNativeAuth(
+                    contextIDs: [state.contextID],
+                    streamID: streamID,
+                    message: String(localized: "The browser sent conflicting authentication state. Start the browser action again.")
+                )
+                return
+            }
+            return
+        }
+        guard bufferedNativeAuthStates.count < 8 else {
+            quarantineNativeAuth(
+                contextIDs: [state.contextID],
+                streamID: streamID,
+                message: String(localized: "The browser sent too many authentication requests. Start the browser action again.")
+            )
+            return
+        }
+        bufferedNativeAuthStates[state.contextID] = (streamID, state)
+    }
+
+    private func applyBufferedNativeAuthStateIfPossible(contextID: String) {
+        guard let buffered = bufferedNativeAuthStates[contextID],
+              let prompt = nativeAuthPrompt,
+              prompt.contextID == contextID,
+              prompt.streamID == buffered.streamID,
+              nativeAuthState(buffered.state, matches: prompt)
+        else { return }
+        bufferedNativeAuthStates[contextID] = nil
+        streamCoordinatorApplyNativeAuthState(buffered.state)
+    }
+
+    private func terminalizeNativeAuth(contextID: String) {
+        quarantinedNativeAuthContextIDs.insert(contextID)
+        nativeAuthStateOrderByContextID[contextID] = nil
+        bufferedNativeAuthStates[contextID] = nil
+        pendingNativeAuthSubmission = nil
+        if nativeAuthPrompt?.contextID == contextID { nativeAuthPrompt = nil }
+        nativeAuthRequestGeneration &+= 1
+        nativeAuthErrorMessage = nil
+    }
+
+    private func quarantineNativeAuth(contextIDs: Set<String>, streamID: String, message: String) {
+        quarantinedNativeAuthContextIDs.formUnion(contextIDs)
+        quarantinedNativeAuthStreamIDs.insert(streamID)
+        for contextID in contextIDs {
+            bufferedNativeAuthStates[contextID] = nil
+        }
+        pendingNativeAuthSubmission = nil
+        nativeAuthPrompt = nil
+        nativeAuthRequestGeneration &+= 1
+        nativeAuthErrorMessage = message
+    }
+
+    func streamCoordinatorApplyWebsiteLogin(_ request: WebsiteLoginRequest) {
+        guard sessionID != nil,
+              !resolvedWebsiteLoginRequestIDs.contains(request.requestID)
+        else { return }
+        websiteLoginErrorMessage = nil
+        websiteLoginPrompt = request
     }
 
     @discardableResult
