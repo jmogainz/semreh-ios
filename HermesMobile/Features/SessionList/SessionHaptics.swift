@@ -26,6 +26,15 @@ enum SessionHaptics {
         emit(.warning, isEnabled: isEnabled, performer: performer)
     }
 
+    static func commitSessionDeletion(
+        isEnabled: Bool,
+        performer: Performer = perform,
+        operation: @escaping @MainActor () async -> Void
+    ) async {
+        sessionDeleted(isEnabled: isEnabled, performer: performer)
+        await operation()
+    }
+
     static func sessionRenamed(isEnabled: Bool, performer: Performer = perform) {
         emit(.selection, isEnabled: isEnabled, performer: performer)
     }

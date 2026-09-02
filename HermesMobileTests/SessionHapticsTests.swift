@@ -33,4 +33,22 @@ final class SessionHapticsTests: XCTestCase {
             .selection
         ])
     }
+
+    @MainActor
+    func testSessionDeletionHapticFiresBeforeDeletionOperation() async {
+        var events: [String] = []
+
+        await SessionHaptics.commitSessionDeletion(
+            isEnabled: true,
+            performer: { feedback in
+                events.append("haptic:\(feedback)")
+            },
+            operation: {
+                events.append("operation")
+                await Task.yield()
+            }
+        )
+
+        XCTAssertEqual(events, ["haptic:warning", "operation"])
+    }
 }
