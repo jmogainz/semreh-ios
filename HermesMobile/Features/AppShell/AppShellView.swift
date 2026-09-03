@@ -344,10 +344,10 @@ struct AppShellBottomBar: View {
 
 private enum AppShellBottomBarMotion {
     static let tabSpacing: CGFloat = 6
-    static let glideDuration: Double = 0.44
+    static let glideDuration: Double = 0.28
 
     static func animation(reduceMotion: Bool) -> Animation? {
-        reduceMotion ? nil : .timingCurve(0.22, 0.70, 0.28, 1.0, duration: glideDuration)
+        reduceMotion ? nil : .timingCurve(0.18, 0.82, 0.24, 1.0, duration: glideDuration)
     }
 }
 
@@ -436,10 +436,10 @@ struct AppShellCapsuleMotion: Equatable {
     let initialCompression: CGFloat
     let initialHighlight: CGFloat
 
-    static let travelDuration: TimeInterval = AppShellBottomBarMotion.glideDuration
-    static let settleDuration: TimeInterval = 0.08
+    static let travelDuration: TimeInterval = 0.24
+    static let settleDuration: TimeInterval = 0.04
     static let totalDuration: TimeInterval = travelDuration + settleDuration
-    static let retargetBlendDuration: TimeInterval = 0.12
+    static let retargetBlendDuration: TimeInterval = 0.10
 
     init(
         start: CGFloat,
@@ -467,12 +467,10 @@ struct AppShellCapsuleMotion: Equatable {
 
     func retargeted(to newTarget: CGFloat, at date: Date) -> Self {
         let currentDeformation = deformation(at: date)
-        let currentDirection: CGFloat = target >= start ? 1 : -1
-        let directionBlend = directionBlend(at: date)
-        let desiredLeftPull = currentDirection > 0 ? 0.12 * currentDeformation : 0.24 * currentDeformation
-        let desiredRightPull = currentDirection > 0 ? 0.24 * currentDeformation : 0.12 * currentDeformation
-        let currentLeftPull = interpolated(initialLeftPull, toward: desiredLeftPull, by: directionBlend)
-        let currentRightPull = interpolated(initialRightPull, toward: desiredRightPull, by: directionBlend)
+        let blend = directionBlend(at: date)
+        let desired = desiredPulls(at: date)
+        let currentLeftPull = interpolated(initialLeftPull, toward: desired.left, by: blend)
+        let currentRightPull = interpolated(initialRightPull, toward: desired.right, by: blend)
         return Self(
             start: position(at: date),
             target: newTarget,
@@ -480,7 +478,7 @@ struct AppShellCapsuleMotion: Equatable {
             initialDeformation: currentDeformation,
             initialLeftPull: currentLeftPull,
             initialRightPull: currentRightPull,
-            initialCompression: interpolated(initialCompression, toward: settleCompression(at: date), by: directionBlend),
+            initialCompression: 0,
             initialHighlight: highlight(at: date)
         )
     }
@@ -499,42 +497,31 @@ struct AppShellCapsuleMotion: Equatable {
     }
 
     func position(at date: Date) -> CGFloat {
-        let elapsed = max(0, date.timeIntervalSince(startedAt))
         let progress = travelProgress(at: date)
         let easedProgress = cubicProgress(progress)
-        let direction: CGFloat = target >= start ? 1 : -1
-        let settle = min(max((elapsed - Self.travelDuration) / Self.settleDuration, 0), 1)
-        let arrivalOvershoot = direction * 0.035 * sin(.pi * settle)
-        return start + (target - start) * easedProgress + arrivalOvershoot
+        return start + (target - start) * easedProgress
     }
 
     func deformation(at date: Date) -> CGFloat {
         let elapsed = max(0, date.timeIntervalSince(startedAt))
-        let localProgress = min(max(elapsed / Self.travelDuration, 0), 1)
-        return max(initialDeformation * (1 - localProgress), sin(.pi * travelProgress(at: date)))
+        let totalProgress = min(max(elapsed / Self.totalDuration, 0), 1)
+        let wave = start == target ? 0 : sin(.pi * totalProgress)
+        return max(initialDeformation * (1 - totalProgress), wave)
     }
 
     func frame(at date: Date, tabWidth: CGFloat) -> AppShellCapsuleMotionFrame {
         let elapsed = max(0, date.timeIntervalSince(startedAt))
         let linearProgress = travelProgress(at: date)
         let normalizedPosition = position(at: date)
-        let direction: CGFloat = target >= start ? 1 : -1
-        let deformation = deformation(at: date)
-        let directionBlend = directionBlend(at: date)
-        let desiredLeftPull = direction > 0 ? 0.12 * deformation : 0.24 * deformation
-        let desiredRightPull = direction > 0 ? 0.24 * deformation : 0.12 * deformation
-        let leftPull = tabWidth * interpolated(initialLeftPull, toward: desiredLeftPull, by: directionBlend)
-        let rightPull = tabWidth * interpolated(initialRightPull, toward: desiredRightPull, by: directionBlend)
-        let compression = interpolated(initialCompression, toward: settleCompression(at: date), by: directionBlend)
+        let blend = directionBlend(at: date)
+        let desired = desiredPulls(at: date)
+        let leftPull = tabWidth * interpolated(initialLeftPull, toward: desired.left, by: blend)
+        let rightPull = tabWidth * interpolated(initialRightPull, toward: desired.right, by: blend)
         let travel = normalizedPosition * (tabWidth + AppShellBottomBarMotion.tabSpacing)
         let left = travel - leftPull
         let right = travel + tabWidth + rightPull
-        let width = right - left - tabWidth * 0.04 * compression
-        let highlight = interpolated(
-            initialHighlight,
-            toward: 0.14 + 0.22 * sin(.pi * linearProgress),
-            by: directionBlend
-        )
+        let width = right - left
+        let highlight = highlight(at: date)
         return AppShellCapsuleMotionFrame(
             left: left,
             right: right,
@@ -547,11 +534,24 @@ struct AppShellCapsuleMotion: Equatable {
         )
     }
 
+    private func desiredPulls(at date: Date) -> (left: CGFloat, right: CGFloat) {
+        let currentDeformation = deformation(at: date)
+        let direction: CGFloat = target >= start ? 1 : -1
+        let distance = abs(target - start)
+        let distanceScale: CGFloat = distance > 1.5 ? 1.25 : 1.0
+        let leadingScale: CGFloat = 0.18 * distanceScale
+        let trailingScale: CGFloat = 0.08 * distanceScale
+        let desiredLeft = direction > 0 ? trailingScale * currentDeformation : leadingScale * currentDeformation
+        let desiredRight = direction > 0 ? leadingScale * currentDeformation : trailingScale * currentDeformation
+        return (desiredLeft, desiredRight)
+    }
+
     private func highlight(at date: Date) -> CGFloat {
         let blend = directionBlend(at: date)
+        let currentDeformation = deformation(at: date)
         return interpolated(
             initialHighlight,
-            toward: 0.14 + 0.22 * sin(.pi * travelProgress(at: date)),
+            toward: 0.14 + 0.20 * currentDeformation,
             by: blend
         )
     }
@@ -561,21 +561,15 @@ struct AppShellCapsuleMotion: Equatable {
         return min(max(elapsed / Self.retargetBlendDuration, 0), 1)
     }
 
-    private func settleCompression(at date: Date) -> CGFloat {
-        let elapsed = max(0, date.timeIntervalSince(startedAt))
-        let settle = min(max((elapsed - Self.travelDuration) / Self.settleDuration, 0), 1)
-        return sin(.pi * settle)
-    }
-
     private func interpolated(_ initial: CGFloat, toward target: CGFloat, by progress: CGFloat) -> CGFloat {
         initial + (target - initial) * progress
     }
 
     private func cubicProgress(_ progress: CGFloat) -> CGFloat {
-        // Deliberately holds the first 100 ms, then accelerates through the
-        // midpoint so the capsule reads as a bridge instead of a snap.
-        let firstControl: CGFloat = 0.34
-        let secondControl: CGFloat = 1.05
+        // High initial responsiveness with zero dead delay, accelerating
+        // through mid-flight and landing with critically damped C1 zero velocity.
+        let firstControl: CGFloat = 0.25
+        let secondControl: CGFloat = 1.0
         let inverse = 1 - progress
         return 3 * inverse * inverse * progress * firstControl
             + 3 * inverse * progress * progress * secondControl
