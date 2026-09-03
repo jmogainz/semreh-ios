@@ -158,6 +158,30 @@ final class AppShellNavigationTests: XCTestCase {
         XCTAssertEqual(immediate.width, 100, accuracy: 0.001)
     }
 
+    func testCapsuleMotionNormalReversePreservesTheRenderedFrameAtRetarget() {
+        let start = Date(timeIntervalSinceReferenceDate: 0)
+        let motion = AppShellCapsuleMotion(start: 0, target: 2, startedAt: start)
+        let retargetTime = start.addingTimeInterval(0.2)
+        let before = motion.frame(at: retargetTime, tabWidth: 100)
+        let reversed = motion.retargeted(to: 1, at: retargetTime)
+        let after = reversed.frame(at: retargetTime, tabWidth: 100)
+
+        assertRenderedFramesMatch(before, after)
+    }
+
+    func testCapsuleMotionRapidRepeatedRetargetPreservesEachRenderedFrame() {
+        let start = Date(timeIntervalSinceReferenceDate: 0)
+        let motion = AppShellCapsuleMotion(start: 0, target: 2, startedAt: start)
+        let firstRetargetTime = start.addingTimeInterval(0.18)
+        let first = motion.retargeted(to: 1, at: firstRetargetTime)
+        let secondRetargetTime = firstRetargetTime.addingTimeInterval(0.07)
+        let before = first.frame(at: secondRetargetTime, tabWidth: 100)
+        let second = first.retargeted(to: 0, at: secondRetargetTime)
+        let after = second.frame(at: secondRetargetTime, tabWidth: 100)
+
+        assertRenderedFramesMatch(before, after)
+    }
+
     func testCapsuleMotionReconcilesAnExternalSurfaceChange() {
         let start = Date(timeIntervalSinceReferenceDate: 0)
         let motion = AppShellCapsuleMotion(start: 0, target: 0, startedAt: start)
@@ -211,6 +235,32 @@ final class AppShellNavigationTests: XCTestCase {
             createProject: { _ in },
             refreshProjects: {},
             export: { _, _ in }
+        )
+    }
+
+    private func assertRenderedFramesMatch(
+        _ before: AppShellCapsuleMotionFrame,
+        _ after: AppShellCapsuleMotionFrame,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(after.left, before.left, accuracy: 0.001, file: file, line: line)
+        XCTAssertEqual(after.right, before.right, accuracy: 0.001, file: file, line: line)
+        XCTAssertEqual(after.width, before.width, accuracy: 0.001, file: file, line: line)
+        XCTAssertEqual(
+            after.center,
+            before.center,
+            accuracy: 0.001,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(after.position, before.position, accuracy: 0.001, file: file, line: line)
+        XCTAssertEqual(
+            after.highlight,
+            before.highlight,
+            accuracy: 0.001,
+            file: file,
+            line: line
         )
     }
 }
