@@ -1243,16 +1243,17 @@ struct SessionListView: View {
     }
 
     private func delete(_ session: SessionSummary) async {
-        let didDelete = await viewModel.delete(
-            session,
-            modelContext: modelContext,
-            animation: SessionListMotion.sessionMutationAnimation(reduceMotion: reduceMotion)
-        )
-        handleLastError()
+        await SessionHaptics.commitSessionDeletion(isEnabled: isHapticsEnabled) {
+            let didDelete = await viewModel.delete(
+                session,
+                modelContext: modelContext,
+                animation: SessionListMotion.sessionMutationAnimation(reduceMotion: reduceMotion)
+            )
+            handleLastError()
 
-        if didDelete {
-            removeSessionFromNavigation(session)
-            SessionHaptics.sessionDeleted(isEnabled: isHapticsEnabled)
+            if didDelete {
+                removeSessionFromNavigation(session)
+            }
         }
     }
 

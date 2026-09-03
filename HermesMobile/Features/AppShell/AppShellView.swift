@@ -48,11 +48,31 @@ struct AppShellView: View {
     @Binding var pendingSharedImport: SharedImport?
     @Binding var pendingDeepLinkedSessionID: String?
     @Binding var pendingNewChatRequest: NewChatRequest?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var isSessionConversationPresented = false
     @State private var isControlDestinationPresented = false
     @State private var controlSurfaceVisitID = 0
     @State private var sessionSurfaceVisitID = 0
+    @State private var capsuleMotion: AppShellCapsuleMotion
+
+    init(
+        authManager: AuthManager,
+        server: URL,
+        selectedSurface: Binding<AppShellSurface>,
+        pendingSharedImport: Binding<SharedImport?>,
+        pendingDeepLinkedSessionID: Binding<String?>,
+        pendingNewChatRequest: Binding<NewChatRequest?>
+    ) {
+        self.authManager = authManager
+        self.server = server
+        self._selectedSurface = selectedSurface
+        self._pendingSharedImport = pendingSharedImport
+        self._pendingDeepLinkedSessionID = pendingDeepLinkedSessionID
+        self._pendingNewChatRequest = pendingNewChatRequest
+        let initialIndex = CGFloat(AppShellSurface.allCases.firstIndex(of: selectedSurface.wrappedValue) ?? 0)
+        self._capsuleMotion = State(initialValue: AppShellCapsuleMotion(settledAt: initialIndex))
+    }
 
     var body: some View {
         surfaceContent
@@ -73,16 +93,33 @@ struct AppShellView: View {
                     isConversationPresented: isSessionConversationPresented,
                     isControlDestinationPresented: isControlDestinationPresented
                 ) {
-                    AppShellBottomBar(selection: $selectedSurface)
+                    AppShellBottomBar(
+                        selection: $selectedSurface,
+                        motion: capsuleMotion,
+                        onSelect: selectSurface
+                    )
                 }
             }
             .onChange(of: selectedSurface) { oldValue, newValue in
                 guard oldValue != newValue else { return }
+                capsuleMotion = capsuleMotion.reconciled(
+                    to: surfaceIndex(newValue),
+                    reduceMotion: reduceMotion,
+                    at: Date()
+                )
                 isControlDestinationPresented = false
                 controlSurfaceVisitID += 1
                 if newValue == .sessions {
                     sessionSurfaceVisitID += 1
                 }
+            }
+            .onChange(of: reduceMotion) { _, isEnabled in
+                guard isEnabled else { return }
+                capsuleMotion = capsuleMotion.reconciled(
+                    to: surfaceIndex(selectedSurface),
+                    reduceMotion: true,
+                    at: Date()
+                )
             }
     }
 
@@ -128,6 +165,21 @@ struct AppShellView: View {
         case .control, .you:
             break
         }
+    }
+
+    private func selectSurface(_ surface: AppShellSurface) {
+        guard surface != selectedSurface else { return }
+
+        let now = Date()
+        let target = surfaceIndex(surface)
+        capsuleMotion = reduceMotion
+            ? AppShellCapsuleMotion(settledAt: target)
+            : capsuleMotion.retargeted(to: target, at: now)
+        selectedSurface = surface
+    }
+
+    private func surfaceIndex(_ surface: AppShellSurface) -> CGFloat {
+        CGFloat(AppShellSurface.allCases.firstIndex(of: surface) ?? 0)
     }
 }
 
@@ -254,22 +306,22 @@ private struct AppShellCircularButtonStyle: ButtonStyle {
 
 struct AppShellBottomBar: View {
     @Binding var selection: AppShellSurface
+    let motion: AppShellCapsuleMotion
+    let onSelect: (AppShellSurface) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Namespace private var tabSelectionNamespace
 
     var body: some View {
         AdaptiveGlassContainer(spacing: 12) {
-            HStack(spacing: 6) {
-                ForEach(AppShellSurface.allCases) { surface in
-                    AppShellTabButton(
-                        surface: surface,
-                        isSelected: selection == surface,
-                        namespace: tabSelectionNamespace,
-                        reduceMotion: reduceMotion
-                    ) {
-                        withAnimation(reduceMotion ? nil : .snappy(duration: 0.28, extraBounce: 0.04)) {
-                            selection = surface
-                        }
+            ZStack(alignment: .leading) {
+                AppShellSelectionCapsule(motion: motion, reduceMotion: reduceMotion)
+
+                HStack(spacing: AppShellBottomBarMotion.tabSpacing) {
+                    ForEach(AppShellSurface.allCases) { surface in
+                        AppShellTabButton(
+                            surface: surface,
+                            isSelected: selection == surface,
+                            reduceMotion: reduceMotion
+                        ) { onSelect(surface) }
                     }
                 }
             }
@@ -290,10 +342,247 @@ struct AppShellBottomBar: View {
     }
 }
 
+private enum AppShellBottomBarMotion {
+    static let tabSpacing: CGFloat = 6
+    static let glideDuration: Double = 0.28
+
+    static func animation(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .timingCurve(0.20, 0.85, 0.20, 1.0, duration: glideDuration)
+    }
+}
+
+private struct AppShellSelectionCapsule: View {
+    let motion: AppShellCapsuleMotion
+    let reduceMotion: Bool
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        GeometryReader { proxy in
+            let tabWidth = (proxy.size.width - AppShellBottomBarMotion.tabSpacing * 2) / 3
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: reduceMotion)) { context in
+                let frame = motion.frame(at: context.date, tabWidth: tabWidth)
+                let inFlightHighlight = reduceTransparency
+                    ? 0.16
+                    : frame.highlight
+
+                Capsule()
+                    .adaptiveGlass(
+                        .regular,
+                        isInteractive: false,
+                        tint: reduceTransparency ? nil : Color.white.opacity(0.16),
+                        fallbackMaterial: reduceTransparency ? .regularMaterial : .ultraThinMaterial,
+                        in: Capsule()
+                    )
+                    .overlay {
+                        Capsule()
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(reduceTransparency ? 0.34 : inFlightHighlight),
+                                        Color.white.opacity(0.06),
+                                        Color.white.opacity(reduceTransparency ? 0.28 : inFlightHighlight * 0.78)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1.25
+                            )
+                    }
+                    .overlay {
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(reduceTransparency ? 0.14 : inFlightHighlight * 0.82),
+                                        .clear,
+                                        Color.white.opacity(reduceTransparency ? 0.06 : inFlightHighlight * 0.30)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                    }
+                    .shadow(
+                        color: Color.white.opacity(reduceTransparency ? 0 : 0.14),
+                        radius: 2,
+                        y: 1
+                    )
+                    .frame(width: frame.width, height: 64)
+                    .offset(x: frame.left)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+struct AppShellCapsuleMotionFrame: Equatable {
+    let left: CGFloat
+    let right: CGFloat
+    let width: CGFloat
+    let center: CGFloat
+    let position: CGFloat
+    let travel: CGFloat
+    let highlight: CGFloat
+    let isSettled: Bool
+}
+
+struct AppShellCapsuleMotion: Equatable {
+    let start: CGFloat
+    let target: CGFloat
+    let startedAt: Date
+    let initialDeformation: CGFloat
+    let initialLeftPull: CGFloat
+    let initialRightPull: CGFloat
+    let initialCompression: CGFloat
+    let initialHighlight: CGFloat
+
+    static let travelDuration: TimeInterval = AppShellBottomBarMotion.glideDuration
+    static let settleDuration: TimeInterval = 0.0
+    static let totalDuration: TimeInterval = travelDuration + settleDuration
+    static let retargetBlendDuration: TimeInterval = 0.10
+
+    init(
+        start: CGFloat,
+        target: CGFloat,
+        startedAt: Date,
+        initialDeformation: CGFloat = 0,
+        initialLeftPull: CGFloat = 0,
+        initialRightPull: CGFloat = 0,
+        initialCompression: CGFloat = 0,
+        initialHighlight: CGFloat = 0.14
+    ) {
+        self.start = start
+        self.target = target
+        self.startedAt = startedAt
+        self.initialDeformation = initialDeformation
+        self.initialLeftPull = initialLeftPull
+        self.initialRightPull = initialRightPull
+        self.initialCompression = initialCompression
+        self.initialHighlight = initialHighlight
+    }
+
+    init(settledAt position: CGFloat) {
+        self.init(start: position, target: position, startedAt: Date())
+    }
+
+    func retargeted(to newTarget: CGFloat, at date: Date) -> Self {
+        let currentDeformation = deformation(at: date)
+        let currentDirection: CGFloat = target >= start ? 1 : -1
+        let directionBlend = directionBlend(at: date)
+        let desiredLeftPull = currentDirection > 0 ? 0.09 * currentDeformation : 0.26 * currentDeformation
+        let desiredRightPull = currentDirection > 0 ? 0.26 * currentDeformation : 0.09 * currentDeformation
+        let currentLeftPull = interpolated(initialLeftPull, toward: desiredLeftPull, by: directionBlend)
+        let currentRightPull = interpolated(initialRightPull, toward: desiredRightPull, by: directionBlend)
+        return Self(
+            start: position(at: date),
+            target: newTarget,
+            startedAt: date,
+            initialDeformation: currentDeformation,
+            initialLeftPull: currentLeftPull,
+            initialRightPull: currentRightPull,
+            initialCompression: 0,
+            initialHighlight: highlight(at: date)
+        )
+    }
+
+    func reconciled(to newTarget: CGFloat, reduceMotion: Bool, at date: Date) -> Self {
+        if reduceMotion {
+            return Self(start: newTarget, target: newTarget, startedAt: date)
+        }
+        guard target != newTarget else { return self }
+        return retargeted(to: newTarget, at: date)
+    }
+
+    func travelProgress(at date: Date) -> CGFloat {
+        guard start != target else { return 1 }
+        return min(max(date.timeIntervalSince(startedAt) / Self.travelDuration, 0), 1)
+    }
+
+    func position(at date: Date) -> CGFloat {
+        let progress = travelProgress(at: date)
+        let easedProgress = cubicProgress(progress)
+        return start + (target - start) * easedProgress
+    }
+
+    func deformation(at date: Date) -> CGFloat {
+        guard start != target else { return 0 }
+        let elapsed = max(0, date.timeIntervalSince(startedAt))
+        let localProgress = min(max(elapsed / Self.travelDuration, 0), 1)
+        let progress = travelProgress(at: date)
+        let activeDeformation = sin(.pi * pow(progress, 0.82))
+        return max(initialDeformation * (1 - localProgress), activeDeformation)
+    }
+
+    func frame(at date: Date, tabWidth: CGFloat) -> AppShellCapsuleMotionFrame {
+        let elapsed = max(0, date.timeIntervalSince(startedAt))
+        let linearProgress = travelProgress(at: date)
+        let normalizedPosition = position(at: date)
+        let direction: CGFloat = target >= start ? 1 : -1
+        let deformation = deformation(at: date)
+        let directionBlend = directionBlend(at: date)
+        let desiredLeftPull = direction > 0 ? 0.09 * deformation : 0.26 * deformation
+        let desiredRightPull = direction > 0 ? 0.26 * deformation : 0.09 * deformation
+        let leftPull = tabWidth * interpolated(initialLeftPull, toward: desiredLeftPull, by: directionBlend)
+        let rightPull = tabWidth * interpolated(initialRightPull, toward: desiredRightPull, by: directionBlend)
+        let travel = normalizedPosition * (tabWidth + AppShellBottomBarMotion.tabSpacing)
+        let left = travel - leftPull
+        let right = travel + tabWidth + rightPull
+        let width = right - left
+        let highlight = interpolated(
+            initialHighlight,
+            toward: 0.14 + 0.22 * sin(.pi * pow(linearProgress, 0.82)),
+            by: directionBlend
+        )
+        return AppShellCapsuleMotionFrame(
+            left: left,
+            right: right,
+            width: width,
+            center: left + width / 2,
+            position: normalizedPosition,
+            travel: linearProgress,
+            highlight: highlight,
+            isSettled: elapsed >= Self.totalDuration
+        )
+    }
+
+    private func highlight(at date: Date) -> CGFloat {
+        let blend = directionBlend(at: date)
+        let progress = travelProgress(at: date)
+        return interpolated(
+            initialHighlight,
+            toward: 0.14 + 0.22 * sin(.pi * pow(progress, 0.82)),
+            by: blend
+        )
+    }
+
+    private func directionBlend(at date: Date) -> CGFloat {
+        let elapsed = max(0, date.timeIntervalSince(startedAt))
+        return min(max(elapsed / Self.retargetBlendDuration, 0), 1)
+    }
+
+    private func settleCompression(at date: Date) -> CGFloat {
+        0
+    }
+
+    private func interpolated(_ initial: CGFloat, toward target: CGFloat, by progress: CGFloat) -> CGFloat {
+        initial + (target - initial) * progress
+    }
+
+    private func cubicProgress(_ progress: CGFloat) -> CGFloat {
+        // Fast, immediate takeoff matching touch and haptics, followed by
+        // a smooth, critically damped deceleration into the target slot.
+        let firstControl: CGFloat = 0.52
+        let secondControl: CGFloat = 1.0
+        let inverse = 1 - progress
+        return 3 * inverse * inverse * progress * firstControl
+            + 3 * inverse * progress * progress * secondControl
+            + progress * progress * progress
+    }
+}
+
 private struct AppShellTabButton: View {
     let surface: AppShellSurface
     let isSelected: Bool
-    let namespace: Namespace.ID
     let reduceMotion: Bool
     let action: () -> Void
 
@@ -309,26 +598,12 @@ private struct AppShellTabButton: View {
             .foregroundStyle(isSelected ? .primary : .secondary)
             .frame(maxWidth: .infinity)
             .frame(height: 64)
-            .background {
-                if isSelected {
-                    Capsule()
-                        .fill(Color.primary.opacity(0.13))
-                        .overlay {
-                            Capsule()
-                                .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
-                        }
-                        .matchedGeometryEffect(
-                            id: "selectedTabIndicator",
-                            in: namespace
-                        )
-                }
-            }
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(surface.title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .animation(reduceMotion ? nil : .snappy(duration: 0.28, extraBounce: 0.04), value: isSelected)
+        .animation(AppShellBottomBarMotion.animation(reduceMotion: reduceMotion), value: isSelected)
     }
 }
 
@@ -374,7 +649,11 @@ struct TeamsActionPlaceholderView: View {
 }
 
 #Preview {
-    AppShellBottomBar(selection: .constant(.sessions))
+    AppShellBottomBar(
+        selection: .constant(.sessions),
+        motion: AppShellCapsuleMotion(settledAt: 0),
+        onSelect: { _ in }
+    )
         .padding()
         .background(Color.black)
 }
