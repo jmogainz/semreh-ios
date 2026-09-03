@@ -110,39 +110,36 @@ final class AppShellNavigationTests: XCTestCase {
         XCTAssertFalse(shell.showsSectionHeader)
     }
 
-    func testCapsuleMotionDoesNotFrontLoadTheFirst100Milliseconds() {
+    func testCapsuleMotionProvidesResponsiveIgnitionAndCriticallyDampedProgression() {
         let start = Date(timeIntervalSinceReferenceDate: 0)
         let motion = AppShellCapsuleMotion(start: 0, target: 2, startedAt: start)
 
         XCTAssertEqual(motion.position(at: start), 0, accuracy: 0.001)
-        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.1)) / 2, 0.28, accuracy: 0.08)
-        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.2)) / 2, 0.59, accuracy: 0.08)
-        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.3)) / 2, 0.87, accuracy: 0.08)
+        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.06)) / 2, 0.32, accuracy: 0.08)
+        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.14)) / 2, 0.70, accuracy: 0.08)
+        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.22)) / 2, 0.94, accuracy: 0.08)
+        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.28)) / 2, 1.0, accuracy: 0.001)
     }
 
-    func testCapsuleMotionFormsAnAsymmetricBridgeAndSettlesOnce() {
+    func testCapsuleMotionFormsAnAsymmetricBridgeAndSettlesSmoothly() {
         let start = Date(timeIntervalSinceReferenceDate: 0)
         let motion = AppShellCapsuleMotion(start: 0, target: 1, startedAt: start)
         let tabWidth: CGFloat = 100
 
-        let midpoint = motion.frame(at: start.addingTimeInterval(0.22), tabWidth: tabWidth)
+        let midpoint = motion.frame(at: start.addingTimeInterval(0.12), tabWidth: tabWidth)
         XCTAssertGreaterThan(midpoint.width, tabWidth * 1.25)
         XCTAssertGreaterThan(midpoint.right - (midpoint.left + tabWidth), 0)
 
-        let arrival = motion.position(at: start.addingTimeInterval(0.48))
-        XCTAssertGreaterThan(arrival, 1)
-        XCTAssertLessThan(arrival, 1.04)
-
-        let settled = motion.frame(at: start.addingTimeInterval(0.53), tabWidth: tabWidth)
+        let settled = motion.frame(at: start.addingTimeInterval(0.28), tabWidth: tabWidth)
         XCTAssertTrue(settled.isSettled)
         XCTAssertEqual(settled.width, tabWidth, accuracy: 0.01)
-        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.53)), 1, accuracy: 0.001)
+        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.28)), 1, accuracy: 0.001)
     }
 
     func testCapsuleMotionRetargetsContinuouslyAndReduceMotionCanSettleImmediately() {
         let start = Date(timeIntervalSinceReferenceDate: 0)
         let motion = AppShellCapsuleMotion(start: 0, target: 2, startedAt: start)
-        let interruptionTime = start.addingTimeInterval(0.2)
+        let interruptionTime = start.addingTimeInterval(0.12)
         let current = motion.position(at: interruptionTime)
         let currentDeformation = motion.deformation(at: interruptionTime)
         let retargeted = motion.retargeted(to: 1, at: interruptionTime)
@@ -161,7 +158,7 @@ final class AppShellNavigationTests: XCTestCase {
     func testCapsuleMotionNormalReversePreservesTheRenderedFrameAtRetarget() {
         let start = Date(timeIntervalSinceReferenceDate: 0)
         let motion = AppShellCapsuleMotion(start: 0, target: 2, startedAt: start)
-        let retargetTime = start.addingTimeInterval(0.2)
+        let retargetTime = start.addingTimeInterval(0.12)
         let before = motion.frame(at: retargetTime, tabWidth: 100)
         let reversed = motion.retargeted(to: 1, at: retargetTime)
         let after = reversed.frame(at: retargetTime, tabWidth: 100)
@@ -172,9 +169,9 @@ final class AppShellNavigationTests: XCTestCase {
     func testCapsuleMotionRapidRepeatedRetargetPreservesEachRenderedFrame() {
         let start = Date(timeIntervalSinceReferenceDate: 0)
         let motion = AppShellCapsuleMotion(start: 0, target: 2, startedAt: start)
-        let firstRetargetTime = start.addingTimeInterval(0.18)
+        let firstRetargetTime = start.addingTimeInterval(0.10)
         let first = motion.retargeted(to: 1, at: firstRetargetTime)
-        let secondRetargetTime = firstRetargetTime.addingTimeInterval(0.07)
+        let secondRetargetTime = firstRetargetTime.addingTimeInterval(0.05)
         let before = first.frame(at: secondRetargetTime, tabWidth: 100)
         let second = first.retargeted(to: 0, at: secondRetargetTime)
         let after = second.frame(at: secondRetargetTime, tabWidth: 100)
@@ -200,7 +197,7 @@ final class AppShellNavigationTests: XCTestCase {
     func testCapsuleMotionReconciliationDoesNotRestartMatchingInternalTarget() {
         let start = Date(timeIntervalSinceReferenceDate: 0)
         let motion = AppShellCapsuleMotion(start: 0, target: 2, startedAt: start)
-        let date = start.addingTimeInterval(0.2)
+        let date = start.addingTimeInterval(0.12)
 
         let reconciled = motion.reconciled(to: 2, reduceMotion: false, at: date)
 
@@ -214,12 +211,12 @@ final class AppShellNavigationTests: XCTestCase {
         let settled = motion.reconciled(
             to: 2,
             reduceMotion: true,
-            at: start.addingTimeInterval(0.2)
+            at: start.addingTimeInterval(0.12)
         )
 
         XCTAssertEqual(settled.start, 2, accuracy: 0.001)
         XCTAssertEqual(settled.target, 2, accuracy: 0.001)
-        XCTAssertEqual(settled.position(at: start.addingTimeInterval(0.2)), 2, accuracy: 0.001)
+        XCTAssertEqual(settled.position(at: start.addingTimeInterval(0.12)), 2, accuracy: 0.001)
     }
 
     private static var noopActions: SessionListRowActions {
