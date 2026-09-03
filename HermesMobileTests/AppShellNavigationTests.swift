@@ -110,14 +110,19 @@ final class AppShellNavigationTests: XCTestCase {
         XCTAssertFalse(shell.showsSectionHeader)
     }
 
-    func testCapsuleMotionDoesNotFrontLoadTheFirst100Milliseconds() {
+    func testCapsuleMotionLaunchesResponsivelyAndDeceleratesSmoothly() {
         let start = Date(timeIntervalSinceReferenceDate: 0)
         let motion = AppShellCapsuleMotion(start: 0, target: 2, startedAt: start)
 
         XCTAssertEqual(motion.position(at: start), 0, accuracy: 0.001)
-        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.1)) / 2, 0.28, accuracy: 0.08)
-        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.2)) / 2, 0.59, accuracy: 0.08)
-        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.3)) / 2, 0.87, accuracy: 0.08)
+        // Responsive launch: by 80ms, capsule has completed ~25% of normalized travel
+        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.08)) / 2, 0.249, accuracy: 0.04)
+        // Midpoint glide: by 160ms, capsule has crossed the midpoint smoothly
+        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.16)) / 2, 0.583, accuracy: 0.04)
+        // Viscous deceleration: by 240ms, capsule is gently cushioning toward target
+        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.24)) / 2, 0.875, accuracy: 0.04)
+        // Complete settlement at 320ms without overshoot
+        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.32)) / 2, 1.0, accuracy: 0.001)
     }
 
     func testCapsuleMotionFormsAnAsymmetricBridgeAndSettlesOnce() {
@@ -125,18 +130,15 @@ final class AppShellNavigationTests: XCTestCase {
         let motion = AppShellCapsuleMotion(start: 0, target: 1, startedAt: start)
         let tabWidth: CGFloat = 100
 
-        let midpoint = motion.frame(at: start.addingTimeInterval(0.22), tabWidth: tabWidth)
-        XCTAssertGreaterThan(midpoint.width, tabWidth * 1.25)
+        let midpoint = motion.frame(at: start.addingTimeInterval(0.16), tabWidth: tabWidth)
+        XCTAssertGreaterThan(midpoint.width, tabWidth * 1.08)
+        XCTAssertLessThan(midpoint.width, tabWidth * 1.20)
         XCTAssertGreaterThan(midpoint.right - (midpoint.left + tabWidth), 0)
 
-        let arrival = motion.position(at: start.addingTimeInterval(0.48))
-        XCTAssertGreaterThan(arrival, 1)
-        XCTAssertLessThan(arrival, 1.04)
-
-        let settled = motion.frame(at: start.addingTimeInterval(0.53), tabWidth: tabWidth)
+        let settled = motion.frame(at: start.addingTimeInterval(0.32), tabWidth: tabWidth)
         XCTAssertTrue(settled.isSettled)
         XCTAssertEqual(settled.width, tabWidth, accuracy: 0.01)
-        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.53)), 1, accuracy: 0.001)
+        XCTAssertEqual(motion.position(at: start.addingTimeInterval(0.32)), 1, accuracy: 0.001)
     }
 
     func testCapsuleMotionRetargetsContinuouslyAndReduceMotionCanSettleImmediately() {
