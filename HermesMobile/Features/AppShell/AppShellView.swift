@@ -102,11 +102,24 @@ struct AppShellView: View {
             }
             .onChange(of: selectedSurface) { oldValue, newValue in
                 guard oldValue != newValue else { return }
+                capsuleMotion = capsuleMotion.reconciled(
+                    to: surfaceIndex(newValue),
+                    reduceMotion: reduceMotion,
+                    at: Date()
+                )
                 isControlDestinationPresented = false
                 controlSurfaceVisitID += 1
                 if newValue == .sessions {
                     sessionSurfaceVisitID += 1
                 }
+            }
+            .onChange(of: reduceMotion) { _, isEnabled in
+                guard isEnabled else { return }
+                capsuleMotion = capsuleMotion.reconciled(
+                    to: surfaceIndex(selectedSurface),
+                    reduceMotion: true,
+                    at: Date()
+                )
             }
     }
 
@@ -158,11 +171,15 @@ struct AppShellView: View {
         guard surface != selectedSurface else { return }
 
         let now = Date()
-        let target = CGFloat(AppShellSurface.allCases.firstIndex(of: surface) ?? 0)
+        let target = surfaceIndex(surface)
         capsuleMotion = reduceMotion
             ? AppShellCapsuleMotion(settledAt: target)
             : capsuleMotion.retargeted(to: target, at: now)
         selectedSurface = surface
+    }
+
+    private func surfaceIndex(_ surface: AppShellSurface) -> CGFloat {
+        CGFloat(AppShellSurface.allCases.firstIndex(of: surface) ?? 0)
     }
 }
 
@@ -406,7 +423,7 @@ struct AppShellCapsuleMotionFrame: Equatable {
     let isSettled: Bool
 }
 
-struct AppShellCapsuleMotion {
+struct AppShellCapsuleMotion: Equatable {
     let start: CGFloat
     let target: CGFloat
     let startedAt: Date
@@ -434,6 +451,14 @@ struct AppShellCapsuleMotion {
             startedAt: date,
             initialDeformation: deformation(at: date)
         )
+    }
+
+    func reconciled(to newTarget: CGFloat, reduceMotion: Bool, at date: Date) -> Self {
+        if reduceMotion {
+            return Self(start: newTarget, target: newTarget, startedAt: date)
+        }
+        guard target != newTarget else { return self }
+        return retargeted(to: newTarget, at: date)
     }
 
     func travelProgress(at date: Date) -> CGFloat {

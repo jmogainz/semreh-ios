@@ -158,6 +158,46 @@ final class AppShellNavigationTests: XCTestCase {
         XCTAssertEqual(immediate.width, 100, accuracy: 0.001)
     }
 
+    func testCapsuleMotionReconcilesAnExternalSurfaceChange() {
+        let start = Date(timeIntervalSinceReferenceDate: 0)
+        let motion = AppShellCapsuleMotion(start: 0, target: 0, startedAt: start)
+
+        let reconciled = motion.reconciled(
+            to: 2,
+            reduceMotion: false,
+            at: start.addingTimeInterval(1)
+        )
+
+        XCTAssertEqual(reconciled.start, 0, accuracy: 0.001)
+        XCTAssertEqual(reconciled.target, 2, accuracy: 0.001)
+        XCTAssertEqual(reconciled.position(at: start.addingTimeInterval(1)), 0, accuracy: 0.001)
+    }
+
+    func testCapsuleMotionReconciliationDoesNotRestartMatchingInternalTarget() {
+        let start = Date(timeIntervalSinceReferenceDate: 0)
+        let motion = AppShellCapsuleMotion(start: 0, target: 2, startedAt: start)
+        let date = start.addingTimeInterval(0.2)
+
+        let reconciled = motion.reconciled(to: 2, reduceMotion: false, at: date)
+
+        XCTAssertEqual(reconciled, motion)
+    }
+
+    func testCapsuleMotionSettlesWhenReduceMotionTurnsOnMidGlide() {
+        let start = Date(timeIntervalSinceReferenceDate: 0)
+        let motion = AppShellCapsuleMotion(start: 0, target: 2, startedAt: start)
+
+        let settled = motion.reconciled(
+            to: 2,
+            reduceMotion: true,
+            at: start.addingTimeInterval(0.2)
+        )
+
+        XCTAssertEqual(settled.start, 2, accuracy: 0.001)
+        XCTAssertEqual(settled.target, 2, accuracy: 0.001)
+        XCTAssertEqual(settled.position(at: start.addingTimeInterval(0.2)), 2, accuracy: 0.001)
+    }
+
     private static var noopActions: SessionListRowActions {
         SessionListRowActions(
             retryLoad: {},
